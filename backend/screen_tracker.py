@@ -1,7 +1,7 @@
 # screen_tracker.py
-import cv2
+# import cv2
 import numpy as np
-import pyautogui
+# import pyautogui
 import pytesseract
 import time
 import psycopg2
