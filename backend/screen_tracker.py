@@ -9,8 +9,15 @@ import requests
 import json
 from datetime import datetime
 import psutil
-import win32gui
-import win32process
+import sys
+
+if sys.platform == "win32":
+    import win32gui
+    import win32process
+else:
+    win32gui = None
+    win32process = None
+
 from PIL import Image, ImageGrab
 from dataclasses import dataclass
 from typing import List, Dict, Optional
@@ -118,14 +125,21 @@ class AITimeTracker:
 
 
     def get_active_window_info(self):
-        try:
-            hwnd = win32gui.GetForegroundWindow()
-            window_title = win32gui.GetWindowText(hwnd)
-            _, pid = win32process.GetWindowThreadProcessId(hwnd)
-            process = psutil.Process(pid)
-            return {"application": process.name(), "window_title": window_title}
-        except Exception:
-            return {"application": "Unknown", "window_title": "Unknown"}
+        if sys.platform == "win32" and win32gui and win32process:
+            try:
+                hwnd = win32gui.GetForegroundWindow()
+                window_title = win32gui.GetWindowText(hwnd)
+                _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                process = psutil.Process(pid)
+                return {
+                    "application": process.name(),
+                    "window_title": window_title
+                }
+            except Exception:
+                return {"application": "Unknown", "window_title": "Unknown"}
+        else:
+            # On Linux / cloud → can't fetch active window
+            return {"application": "N/A", "window_title": "N/A"}
 
     def capture_screenshot(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
