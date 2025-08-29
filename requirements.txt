@@ -9,3 +9,4 @@ six==1.17.0
 sqlparse==0.5.3
 tzdata==2025.2
 uv==0.8.5
+uvicorn
