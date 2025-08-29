@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
-from screen_tracker import AITimeTracker
+from .screen_tracker import AITimeTracker
 import json
 from api_server import AITimeTracker
 from jose.exceptions import ExpiredSignatureError
