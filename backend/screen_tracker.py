@@ -197,7 +197,10 @@ class AITimeTracker:
 
                 Return ONLY a JSON object with the following keys:
                 - activity_type (string)
-                - productivity_level (integer from 1–10)
+                - productivity_level (integer from 1–10, where 1 = unproductive/idle, 10 = highly productive. 
+                  If the user is coding, designing, writing documents, attending meetings → score 7–10. 
+                  If browsing social media, YouTube, or unrelated apps → score 0–2. 
+                  If ambiguous but seems work-related (e.g., Chrome tab with project context) → default to 7.)
                 - category (string: Work, Communication, Research, Social, Idle/Leisure, etc.)
 
                 Example:
