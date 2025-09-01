@@ -436,7 +436,7 @@ def manual_entry(payload: dict = Body(...), current_user: UserOut = Depends(get_
         "description": payload["description"],            # User input only
         "project_or_task": payload["project_task"],       # User input only
         "activity_type": ai_analysis.get("activity_type", ""),   # LLM
-        "productivity_level": ai_analysis.get("productivity_level", 5), # LLM
+        "productivity_level": ai_analysis.get("productivity_level", 7), # LLM
         "category": ai_analysis.get("category", "Work")   # LLM
     }
 
