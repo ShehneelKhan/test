@@ -249,7 +249,7 @@ class AITimeTracker:
                 "Content-Type": "application/json"
             }
             data = {
-                "model": "llama3-70b-8192",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [
                     {"role": "system", "content": "You analyze workplace activities and must always return strict JSON."},
                     {"role": "user", "content": prompt}
@@ -266,6 +266,8 @@ class AITimeTracker:
             )
 
             print("##########################################")
+            # print("Status:", resp.status_code)
+            # print("Response JSON:", resp.json())
             print(resp.status_code)
             ai_response = resp.json()["choices"][0]["message"]["content"]
             print(ai_response)

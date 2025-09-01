@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
-from .screen_tracker import AITimeTracker
+from .screen_tracker import AITimeTracker #Enter dot
 import json
 # from api_server import AITimeTracker
 from jose.exceptions import ExpiredSignatureError
@@ -386,11 +386,21 @@ def manual_entry(payload: dict = Body(...), current_user: UserOut = Depends(get_
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid duration")
 
+    if duration_minutes <= 0:
+        raise HTTPException(status_code=400, detail="Duration must be greater than 0")
+    if duration_minutes > 1440:  # ✅ no more than 24h
+        raise HTTPException(status_code=400, detail="Duration cannot exceed 24 hours")
+
+
     # ✅ Combine date + startTime
     start_time = datetime.strptime(
         f"{payload['date']} {payload.get('startTime','09:00')}:00", 
         "%Y-%m-%d %H:%M:%S"
     )
+
+    if start_time.date() != datetime.utcnow().date():
+        raise HTTPException(status_code=400, detail="Date must be today's date only")
+
     end_time = start_time + timedelta(minutes=duration_minutes)
 
     status = payload.get("status", "In Progress")
