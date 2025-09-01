@@ -294,9 +294,9 @@ class AITimeTracker:
 
     def get_fallback_analysis(self, window_info: Dict) -> Dict:
         app = (window_info['application'] or "").lower()
-        if "word" in app or "excel" in app:
+        if "word" in app or "excel" in app or 'teams' in app:
             return {"client_name": "None", "activity_type": "document_editing", "productivity_level": 8, "description": f"Working with {app}", "project_or_task": "Unknown", "category": "Work"}
-        return {"client_name": "None", "activity_type": "general_work", "productivity_level": 5, "description": f"Working with {app}", "project_or_task": "Unknown", "category": "Work"}
+        return {"client_name": "None", "activity_type": "general_work", "productivity_level": 7, "description": f"Working with {app}", "project_or_task": "Unknown", "category": "Work"}
 
     def save_session(self, session: ActivitySession):
         conn = self.db()
