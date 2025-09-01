@@ -141,12 +141,25 @@ class AITimeTracker:
             # On Linux / cloud → can't fetch active window
             return {"application": "N/A", "window_title": "N/A"}
 
-    def capture_screenshot(self) -> str:
+    def capture_screenshot(self, user_id: int, activity_id: int = None) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         os.makedirs("screenshots", exist_ok=True)
         path = f"screenshots/screenshot_{timestamp}.png"
         ImageGrab.grab().save(path)
+
+        # store in DB
+        conn = self.db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO screenshots (user_id, activity_id, path, taken_at)
+            VALUES (%s, %s, %s, NOW())
+        """, (user_id, activity_id, path))
+        conn.commit()
+        cur.close()
+        conn.close()
+
         return path
+
 
     def extract_text_from_screen(self, screenshot_path: str) -> str:
         try:
@@ -339,7 +352,7 @@ class AITimeTracker:
                 if self.current_session:
                     self.current_session.end_time = datetime.now()
                     self.save_session(self.current_session)
-                screenshot_path = self.capture_screenshot()
+                screenshot_path = self.capture_screenshot(self.current_user_id)
                 print("Screenshot Saved.")
                 extracted_text = self.extract_text_from_screen(screenshot_path)
                 ai_analysis, ai_response = self.analyze_content_with_gpt(window_info, extracted_text)

@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
-from .screen_tracker import AITimeTracker #Enter dot
+from .screen_tracker import AITimeTracker #Enter dot for deployment
 import json
 # from api_server import AITimeTracker
 from jose.exceptions import ExpiredSignatureError
@@ -631,10 +631,20 @@ def get_user_activities_by_date(user_id: int, date: str, current_user: UserOut =
 
     activities = []
     for r in rows:
-        try:
-            ai_analysis = json.loads(r[4]) if r[4] else {}
-        except Exception:
+        # ✅ normalize ai_analysis
+        raw_ai = r[4]
+        if not raw_ai:
             ai_analysis = {}
+        elif isinstance(raw_ai, dict):
+            ai_analysis = raw_ai
+        elif isinstance(raw_ai, str):
+            try:
+                ai_analysis = json.loads(raw_ai)
+            except Exception:
+                ai_analysis = {}
+        else:
+            ai_analysis = {}
+
         activities.append({
             "id": r[0],
             "start_time": r[1],
@@ -650,6 +660,116 @@ def get_user_activities_by_date(user_id: int, date: str, current_user: UserOut =
             "duration_minutes": r[11],
         })
     return activities
+
+
+from datetime import datetime, timedelta
+
+@app.get("/api/admin/users/{user_id}/weekly-report")
+def get_weekly_report(user_id: int, current_user: UserOut = Depends(require_admin)):
+    conn = db()
+    cur = conn.cursor()
+
+    today = datetime.utcnow().date()
+    week_start = today - timedelta(days=today.weekday())  # Monday
+    week_end = week_start + timedelta(days=6)
+
+    # Fetch activities
+    cur.execute("""
+        SELECT id, start_time, end_time, client_identified, ai_analysis, category,
+               productivity_score, application, window_title, status, entry_type,
+               ROUND(EXTRACT(EPOCH FROM (COALESCE(end_time, NOW()) - start_time)) / 60.0, 2) AS duration_minutes
+        FROM activities
+        WHERE user_id = %s AND DATE(start_time) BETWEEN %s AND %s
+        ORDER BY start_time
+    """, (user_id, week_start, week_end))
+    activities = cur.fetchall()
+
+    # Fetch screenshots
+    cur.execute("""
+        SELECT id, path, taken_at, activity_id
+        FROM screenshots
+        WHERE user_id = %s AND DATE(taken_at) BETWEEN %s AND %s
+        ORDER BY taken_at
+    """, (user_id, week_start, week_end))
+    screenshots = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    # normalize activities
+    activity_list = []
+    for r in activities:
+        raw_ai = r[4]
+        if not raw_ai:
+            ai_analysis = {}
+        elif isinstance(raw_ai, dict):
+            ai_analysis = raw_ai
+        else:
+            try:
+                ai_analysis = json.loads(raw_ai)
+            except:
+                ai_analysis = {}
+
+        activity_list.append({
+            "id": r[0],
+            "start_time": r[1],
+            "end_time": r[2],
+            "client_identified": r[3],
+            "ai_analysis": ai_analysis,
+            "category": r[5],
+            "productivity_score": r[6],
+            "application": r[7],
+            "window_title": r[8],
+            "status": r[9],
+            "entry_type": r[10],
+            "duration_minutes": r[11],
+        })
+
+    screenshot_list = [
+        {
+            "id": s[0],
+            "path": s[1],
+            "taken_at": s[2],
+            "activity_id": s[3],
+        } for s in screenshots
+    ]
+
+    return {
+        "week_start": str(week_start),
+        "week_end": str(week_end),
+        "activities": activity_list,
+        "screenshots": screenshot_list,
+    }
+
+
+@app.get("/api/admin/users/{user_id}/screenshots-by-date")
+def get_user_screenshots_by_date(user_id: int, date: str, current_user: UserOut = Depends(require_admin)):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, path, taken_at, activity_id
+        FROM screenshots
+        WHERE user_id = %s AND DATE(taken_at) = %s
+        ORDER BY taken_at
+    """, (user_id, date))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return [
+        {
+            "id": r[0],
+            "path": r[1],
+            "taken_at": r[2],
+            "activity_id": r[3],
+        }
+        for r in rows
+    ]
+
+
+from fastapi.staticfiles import StaticFiles
+app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+
 
 
 
