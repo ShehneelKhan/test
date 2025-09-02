@@ -10,6 +10,8 @@ import json
 from datetime import datetime
 import psutil
 import sys
+from pynput.mouse import Listener as MouseListener
+from pynput.keyboard import Listener as KeyboardListener
 
 if sys.platform == "win32":
     import win32gui
@@ -43,15 +45,20 @@ class ActivitySession:
     category: str
     productivity_score: int
     user_id: int
+    duration_minutes: Optional[float] = None  # New field for duration in minutes
 
 class AITimeTracker:
-    def __init__(self):
+    def __init__(self, idle_threshold: int = 180):
         self.api_key = os.getenv("GROQ_API_KEY")
         self.is_tracking = False
         self.current_session = None
         self.screenshot_interval = 30
+        self.idle_threshold = idle_threshold  # Set idle threshold (e.g., 5 minutes)
+        self.last_activity_time = time.time()
+        self.idle_start_time = None  # To track when the user first goes idle
         self.current_user_id: Optional[int] = None
         self.init_database()
+    
 
     def db(self):
         return psycopg2.connect(DATABASE_URL)
@@ -101,6 +108,22 @@ class AITimeTracker:
         conn.commit()
         cur.close()
         conn.close()
+
+    def update_activity(self):
+        self.last_activity_time = time.time()
+        self.idle_start_time = None  # Reset idle start time when user becomes active
+
+    def on_move(self, x, y):
+        self.update_activity()
+
+    def on_click(self, x, y, button, pressed):
+        self.update_activity()
+
+    def on_scroll(self, x, y, dx, dy):
+        self.update_activity()
+
+    def on_press(self, key):
+        self.update_activity()
 
     def match_client(self, client_name: str) -> str:
         if not client_name:
@@ -340,6 +363,46 @@ class AITimeTracker:
         cur.close()
         conn.close()
 
+    def log_idle_activity(self):
+        # If no idle start time has been set, don't log idle activity
+        if not self.idle_start_time:
+            self.idle_start_time = time.time()  # Mark the start time of idle activity
+
+        # Calculate the idle duration (time since the user went idle)
+        total_idle_duration = (time.time() - self.idle_start_time) / 60.0  # Convert to minutes
+
+        # Only log idle activity if idle duration exceeds the threshold and it's not too small
+        if total_idle_duration < (self.idle_threshold / 60.0):  # Convert threshold to minutes
+            return  # Avoid logging if idle duration is less than the threshold
+
+        # If idle activity has already been logged, return without logging it again
+        if self.current_session and self.current_session.application == "Idle":
+            return
+
+        # Log idle activity into the system (save to database)
+        idle_activity = ActivitySession(
+            start_time=datetime.fromtimestamp(self.idle_start_time),  # Idle session start time
+            end_time=datetime.now(),
+            application="Idle",
+            window_title="User is idle",
+            screenshot_path="N/A",  # Optional: no screenshot needed for idle time
+            extracted_text="User is not active",
+            ai_analysis={},
+            client_identified="None",
+            category="Idle/Leisure",
+            productivity_score=0,  # Idle means no productivity
+            user_id=self.current_user_id or 0,
+            duration_minutes=total_idle_duration  # Set the correct duration in minutes
+        )
+
+        # Store the idle activity and include the calculated duration in the database
+        self.save_session(idle_activity)
+
+        # Optionally, log or print the idle activity with duration for monitoring purposes
+        print(f"Logged idle activity. Duration: {total_idle_duration:.2f} minutes.")
+
+
+
     def start_tracking_for_user(self, user_id: int):
         self.current_user_id = user_id
         self.start_tracking()
@@ -348,6 +411,13 @@ class AITimeTracker:
         self.is_tracking = True
         while self.is_tracking:
             window_info = self.get_active_window_info()
+            idle_time = time.time() - self.last_activity_time
+
+            # If the user is idle for more than the threshold, log idle activity
+            if idle_time > self.idle_threshold:
+                self.log_idle_activity()
+
+            # Continue tracking the user's activity
             if not self.current_session or self.current_session.window_title != window_info['window_title']:
                 if self.current_session:
                     self.current_session.end_time = datetime.now()
@@ -356,8 +426,8 @@ class AITimeTracker:
                 print("Screenshot Saved.")
                 extracted_text = self.extract_text_from_screen(screenshot_path)
                 ai_analysis, ai_response = self.analyze_content_with_gpt(window_info, extracted_text)
-                print("AI ANALYSIS: *****************************")
-                print(ai_analysis)
+                # print("AI ANALYSIS: *****************************")
+                # print(ai_analysis)
                 print("AI RESPONSE: ^^^^^^^^^^^^^^^^^^")
                 print(ai_response)
                 self.current_session = ActivitySession(

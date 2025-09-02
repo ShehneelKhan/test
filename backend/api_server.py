@@ -101,6 +101,10 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class ClientCreate(BaseModel):
+    name: str
+    contact_email: Optional[str] = None
+
 
 # ====== Auth utils ======
 def verify_password(plain, hashed):
@@ -311,15 +315,18 @@ def get_activities(
 
 #### ADD CLIENTS #####
 @app.post("/api/clients")
-def add_client(name: str, contact_email: Optional[str] = None, current_user: UserOut = Depends(get_current_user)):
+def add_client(client: ClientCreate, current_user: UserOut = Depends(get_current_user)):
     conn = db()
     cur = conn.cursor()
-    cur.execute("INSERT INTO clients (name, contact_email) VALUES (%s, %s) RETURNING id", (name, contact_email))
+    cur.execute(
+        "INSERT INTO clients (name, contact_email) VALUES (%s, %s) RETURNING id",
+        (client.name, client.contact_email)
+    )
     client_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
-    return {"id": client_id, "name": name, "contact_email": contact_email}
+    return {"id": client_id, "name": client.name, "contact_email": client.contact_email}
 
 
 @app.get("/api/clients")
@@ -669,76 +676,72 @@ def get_weekly_report(user_id: int, current_user: UserOut = Depends(require_admi
     conn = db()
     cur = conn.cursor()
 
+    # Fetch user info
+    cur.execute("SELECT name, email FROM users WHERE id = %s", (user_id,))
+    user_row = cur.fetchone()
+    username = user_row[0] if user_row else f"User {user_id}"
+
     today = datetime.utcnow().date()
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)
 
     # Fetch activities
     cur.execute("""
-        SELECT id, start_time, end_time, client_identified, ai_analysis, category,
-               productivity_score, application, window_title, status, entry_type,
+        SELECT start_time, end_time, client_identified, ai_analysis, category,
+               productivity_score,
                ROUND(EXTRACT(EPOCH FROM (COALESCE(end_time, NOW()) - start_time)) / 60.0, 2) AS duration_minutes
         FROM activities
         WHERE user_id = %s AND DATE(start_time) BETWEEN %s AND %s
         ORDER BY start_time
     """, (user_id, week_start, week_end))
-    activities = cur.fetchall()
-
-    # Fetch screenshots
-    cur.execute("""
-        SELECT id, path, taken_at, activity_id
-        FROM screenshots
-        WHERE user_id = %s AND DATE(taken_at) BETWEEN %s AND %s
-        ORDER BY taken_at
-    """, (user_id, week_start, week_end))
-    screenshots = cur.fetchall()
+    rows = cur.fetchall()
 
     cur.close()
     conn.close()
 
-    # normalize activities
-    activity_list = []
-    for r in activities:
-        raw_ai = r[4]
-        if not raw_ai:
-            ai_analysis = {}
-        elif isinstance(raw_ai, dict):
-            ai_analysis = raw_ai
-        else:
-            try:
-                ai_analysis = json.loads(raw_ai)
-            except:
-                ai_analysis = {}
+    total_time = 0
+    productive_time = 0
+    productivity_scores = []
+    client_count = {}
+    category_time = {}
+    daily_time = {d.strftime("%a"): 0 for d in [week_start + timedelta(days=i) for i in range(7)]}
 
-        activity_list.append({
-            "id": r[0],
-            "start_time": r[1],
-            "end_time": r[2],
-            "client_identified": r[3],
-            "ai_analysis": ai_analysis,
-            "category": r[5],
-            "productivity_score": r[6],
-            "application": r[7],
-            "window_title": r[8],
-            "status": r[9],
-            "entry_type": r[10],
-            "duration_minutes": r[11],
-        })
+    for r in rows:
+        start_time, end_time, client_identified, raw_ai, category, prod_score, duration = r
+        duration = duration or 0
+        total_time += duration
+        if prod_score and prod_score >= 7:
+            productive_time += duration
+        if prod_score:
+            productivity_scores.append(prod_score)
 
-    screenshot_list = [
-        {
-            "id": s[0],
-            "path": s[1],
-            "taken_at": s[2],
-            "activity_id": s[3],
-        } for s in screenshots
-    ]
+        # Client frequency
+        if client_identified and client_identified != "None":
+            client_count[client_identified] = client_count.get(client_identified, 0) + 1
+
+        # Category breakdown
+        if category:
+            category_time[category] = category_time.get(category, 0) + duration
+
+        # Daily breakdown
+        day_name = start_time.strftime("%a")
+        daily_time[day_name] += duration
+
+    avg_productivity = round(sum(productivity_scores) / len(productivity_scores), 2) if productivity_scores else 0
+    top_clients = sorted(client_count.items(), key=lambda x: x[1], reverse=True)[:3]
 
     return {
         "week_start": str(week_start),
         "week_end": str(week_end),
-        "activities": activity_list,
-        "screenshots": screenshot_list,
+        "summary": {
+            "total_hours": round(total_time / 60, 2),
+            "productive_hours": round(productive_time / 60, 2),
+            "avg_productivity": avg_productivity,
+            "top_clients": top_clients,
+        },
+        "category_breakdown": category_time,
+        "daily_breakdown": daily_time,
+        "username": username,
     }
 
 
@@ -768,7 +771,10 @@ def get_user_screenshots_by_date(user_id: int, date: str, current_user: UserOut 
 
 
 from fastapi.staticfiles import StaticFiles
-app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+
+if os.path.isdir("screenshots"):
+    app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+
 
 
 
