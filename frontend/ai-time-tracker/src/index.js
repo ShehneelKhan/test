@@ -7,7 +7,9 @@ import Register from "./components/Register";
 import ManualEntryForm from "./components/ManualEntryForm";
 import ProtectedRoute from "./ProtectedRoute";
 import { AuthProvider } from "./AuthContext";
-import AdminDashboard from "./pages/AdminDashboard";  // ✅ import admin page
+import AdminDashboard from "./pages/AdminDashboard";
+import WeeklyReport from "./pages/WeeklyReport";
+import AddClientPage from "./pages/AddClientPage"; // ✅ new import
 import "./index.css";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
@@ -45,6 +47,26 @@ root.render(
           element={
             <ProtectedRoute>
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Add Client page (protected) */}
+        <Route
+          path="/admin/add-client"
+          element={
+            <ProtectedRoute>
+              <AddClientPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin weekly report (protected) */}
+        <Route
+          path="/admin/weekly-report/:id"
+          element={
+            <ProtectedRoute>
+              <WeeklyReport />
             </ProtectedRoute>
           }
         />

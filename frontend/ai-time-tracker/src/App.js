@@ -40,30 +40,31 @@ const AITimeTracker = () => {
 
   // Calculate daily summary
   const calculateSummary = (activities) => {
-    const totalTime = activities.reduce((sum, activity) => sum + (activity.duration_minutes || 0), 0);
-    const productiveTime = activities
+    let totalTime = activities.reduce((sum, activity) => sum + (activity.duration_minutes || 0), 0);
+    let productiveTime = activities
       .filter(activity => activity.productivity_score >= 7)
       .reduce((sum, activity) => sum + (activity.duration_minutes || 0), 0);
-    
+
+    // ✅ Cap total time at 24 hours (1440 minutes)
+    if (totalTime > 1440) totalTime = 1440;
+    if (productiveTime > 1440) productiveTime = 1440;
+
     const uniqueClients = new Set(
       activities
         .map(activity => activity.client_identified)
         .filter(client => client && client !== 'None')
     );
-    
-    const avgProductivity = activities.length > 0 
-      ? activities.reduce((sum, activity) => sum + activity.productivity_score, 0) / activities.length
-      : 0;
 
     setSummary({
       totalTime: Math.round(totalTime / 60 * 100) / 100, // Convert to hours
       productiveTime: Math.round(productiveTime / 60 * 100) / 100,
       clientsWorkedWith: uniqueClients.size,
       averageProductivity: totalTime > 0 
-      ? Math.round((productiveTime / totalTime) * 10 * 10) / 10  // scale 0–10
-      : 0
+        ? Math.round((productiveTime / totalTime) * 10 * 10) / 10
+        : 0
     });
   };
+
 
     // Start/Stop tracking
     const toggleTracking = async () => {

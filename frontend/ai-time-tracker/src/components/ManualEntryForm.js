@@ -164,10 +164,13 @@ export default function ManualEntryForm({ onEntryAdded }) {
       <input
         type="date"
         value={form.date}
+        min={new Date().toISOString().split("T")[0]}   // ✅ only today
+        max={new Date().toISOString().split("T")[0]}   // ✅ only today
         onChange={(e) => setForm({ ...form, date: e.target.value })}
         className="w-full border rounded-lg p-2 mb-4"
         required
       />
+
 
       {/* Start Time */}
       <label className="block mb-2 text-sm font-medium">Start Time *</label>
