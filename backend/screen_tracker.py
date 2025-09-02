@@ -10,8 +10,22 @@ import json
 from datetime import datetime
 import psutil
 import sys
-from pynput.mouse import Listener as MouseListener
-from pynput.keyboard import Listener as KeyboardListener
+# ✅ Safe import for pynput
+try:
+    from pynput.mouse import Listener as MouseListener
+    from pynput.keyboard import Listener as KeyboardListener
+except ImportError:
+    print("⚠️ pynput not available (cloud env). Using dummy listeners.")
+
+    class MouseListener:
+        def __init__(self, *args, **kwargs): pass
+        def start(self): pass
+        def stop(self): pass
+
+    class KeyboardListener:
+        def __init__(self, *args, **kwargs): pass
+        def start(self): pass
+        def stop(self): pass
 
 if sys.platform == "win32":
     import win32gui
