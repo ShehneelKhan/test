@@ -17,7 +17,7 @@ import json
 # from api_server import AITimeTracker
 from jose.exceptions import ExpiredSignatureError
 
-
+# print("Debug message", flush=True)
 
 
 # ====== Config ======
@@ -340,6 +340,32 @@ def list_clients(current_user: UserOut = Depends(get_current_user)):
     cur.close()
     conn.close()
     return [{"id": r[0], "name": r[1], "contact_email": r[2]} for r in rows]
+
+from fastapi import HTTPException, Path
+
+@app.put("/api/clients/{client_id}")
+def update_client(client_id: int, client: ClientCreate, current_user: UserOut = Depends(get_current_user)):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("UPDATE clients SET name=%s, contact_email=%s WHERE id=%s",
+                (client.name, client.contact_email, client_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"id": client_id, "name": client.name, "contact_email": client.contact_email}
+
+@app.delete("/api/clients/{client_id}")
+def delete_client(client_id: int, current_user: UserOut = Depends(get_current_user)):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM clients WHERE id=%s", (client_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"status": "success"}
+
+
+
 
 @app.get("/api/clients-summary")
 def clients_summary(

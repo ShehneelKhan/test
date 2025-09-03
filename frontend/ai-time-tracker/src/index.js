@@ -10,6 +10,7 @@ import { AuthProvider } from "./AuthContext";
 import AdminDashboard from "./pages/AdminDashboard";
 import WeeklyReport from "./pages/WeeklyReport";
 import AddClientPage from "./pages/AddClientPage"; // ✅ new import
+import ClientManagementPage from "./pages/ClientManagementPage"; // ✅ new import
 import "./index.css";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
@@ -70,6 +71,16 @@ root.render(
             </ProtectedRoute>
           }
         />
+
+        {/* Client Management */}
+        <Route
+        path="/admin/clients"
+        element={
+          <ProtectedRoute>
+            <ClientManagementPage />
+          </ProtectedRoute>
+        }
+      />
       </Routes>
     </BrowserRouter>
   </AuthProvider>

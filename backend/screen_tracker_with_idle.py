@@ -10,6 +10,22 @@ import json
 from datetime import datetime
 import psutil
 import sys
+# ✅ Safe import for pynput
+try:
+    from pynput.mouse import Listener as MouseListener
+    from pynput.keyboard import Listener as KeyboardListener
+except ImportError:
+    print("⚠️ pynput not available (cloud env). Using dummy listeners.")
+
+    class MouseListener:
+        def __init__(self, *args, **kwargs): pass
+        def start(self): pass
+        def stop(self): pass
+
+    class KeyboardListener:
+        def __init__(self, *args, **kwargs): pass
+        def start(self): pass
+        def stop(self): pass
 
 if sys.platform == "win32":
     import win32gui
@@ -20,8 +36,9 @@ else:
 
 from PIL import Image, ImageGrab
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import List, Dict, Optional
 import os
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 
@@ -36,19 +53,23 @@ class ActivitySession:
     window_title: str
     screenshot_path: str
     extracted_text: str
+    # ai_response: str
     ai_analysis: Dict
     client_identified: Optional[str]
     category: str
     productivity_score: int
     user_id: int
-    duration_minutes: Optional[float] = None
+    duration_minutes: Optional[float] = None  # New field for duration in minutes
 
 class AITimeTracker:
-    def __init__(self):
+    def __init__(self, idle_threshold: int = 180):
         self.api_key = os.getenv("GROQ_API_KEY")
         self.is_tracking = False
         self.current_session = None
-        self.screenshot_interval = 5
+        self.screenshot_interval = 30
+        self.idle_threshold = idle_threshold  # Set idle threshold (e.g., 5 minutes)
+        self.last_activity_time = time.time()
+        self.idle_start_time = None  # To track when the user first goes idle
         self.current_user_id: Optional[int] = None
         self.init_database()
     
@@ -97,9 +118,26 @@ class AITimeTracker:
         )
         """)
 
+
         conn.commit()
         cur.close()
         conn.close()
+
+    def update_activity(self):
+        self.last_activity_time = time.time()
+        self.idle_start_time = None  # Reset idle start time when user becomes active
+
+    def on_move(self, x, y):
+        self.update_activity()
+
+    def on_click(self, x, y, button, pressed):
+        self.update_activity()
+
+    def on_scroll(self, x, y, dx, dy):
+        self.update_activity()
+
+    def on_press(self, key):
+        self.update_activity()
 
     def match_client(self, client_name: str) -> str:
         if not client_name:
@@ -108,14 +146,20 @@ class AITimeTracker:
         try:
             conn = self.db()
             cur = conn.cursor()
+            
+            # Case-insensitive match against clients table
             cur.execute("SELECT name FROM clients WHERE LOWER(name) = LOWER(%s) LIMIT 1;", (client_name,))
             result = cur.fetchone()
+
             cur.close()
             conn.close()
+
             return result[0] if result else "None"
         except Exception as e:
             print("DB Error in match_client:", str(e))
             return "None"
+
+
 
     def get_active_window_info(self):
         if sys.platform == "win32" and win32gui and win32process:
@@ -131,6 +175,7 @@ class AITimeTracker:
             except Exception:
                 return {"application": "Unknown", "window_title": "Unknown"}
         else:
+            # On Linux / cloud → can't fetch active window
             return {"application": "N/A", "window_title": "N/A"}
 
     def capture_screenshot(self, user_id: int, activity_id: int = None) -> str:
@@ -139,6 +184,7 @@ class AITimeTracker:
         path = f"screenshots/screenshot_{timestamp}.png"
         ImageGrab.grab().save(path)
 
+        # store in DB
         conn = self.db()
         cur = conn.cursor()
         cur.execute("""
@@ -151,12 +197,42 @@ class AITimeTracker:
 
         return path
 
+
     def extract_text_from_screen(self, screenshot_path: str) -> str:
         try:
             image = Image.open(screenshot_path)
             return pytesseract.image_to_string(image, lang='eng').strip()
         except Exception:
             return ""
+
+    # def analyze_content_with_gpt(self, window_info: Dict, extracted_text: str) -> Dict:
+    #     try:
+    #         prompt = f"""
+    #         Application: {window_info['application']}
+    #         Window Title: {window_info['window_title']}
+    #         Extracted Text: {extracted_text[:2000]}
+    #         Return JSON with: client_name, activity_type, productivity_level,
+    #         description, project_or_task, category
+    #         """
+    #         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+    #         data = {
+    #             "model": "gpt-3.5-turbo",
+    #             "messages": [
+    #                 {"role": "system", "content": "You analyze workplace activities."},
+    #                 {"role": "user", "content": prompt}
+    #             ],
+    #             "max_tokens": 300,
+    #             "temperature": 0.3
+    #         }
+    #         resp = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data, timeout=30)
+    #         if resp.status_code == 200:
+    #             try:
+    #                 return json.loads(resp.json()['choices'][0]['message']['content'])
+    #             except:
+    #                 return {"client_name": "Unknown", "activity_type": "general_work", "productivity_level": 5, "description": "Unknown", "project_or_task": "Unknown", "category": "Work"}
+    #         return self.get_fallback_analysis(window_info)
+    #     except:
+    #         return self.get_fallback_analysis(window_info)
 
     def analyze_content_with_gpt(self, window_info: Dict, extracted_text: str, manual_override: bool = False):
         try:
@@ -248,34 +324,23 @@ class AITimeTracker:
 
             if resp.status_code == 200:
                 try:
-                    import re
-                    # Clean up code fences before parsing JSON
-                    clean_response = ai_response.strip()
-                    # Remove ```json ... ``` or ``` ... ```
-                    if clean_response.startswith("```"):
-                        clean_response = re.sub(r"^```(json)?", "", clean_response.strip(), flags=re.IGNORECASE).strip()
-                        clean_response = re.sub(r"```$", "", clean_response).strip()
-
                     # ✅ Use AI JSON directly
-                    ai_analysis = json.loads(clean_response)
+                    ai_analysis = json.loads(ai_response)
                     # 🔥 If it's a list, take the first element
                     if isinstance(ai_analysis, list) and len(ai_analysis) > 0:
                         ai_analysis = ai_analysis[0]
                     # ✅ Validate client name
                     ai_analysis["client_name"] = self.match_client(ai_analysis.get("client_name"))
                     return ai_analysis, ai_response
-                except Exception as e:
-                    print("LLM Exception1:", str(e))
+                except Exception:
                     # If LLM didn’t return proper JSON, fallback
                     return self.get_fallback_analysis(window_info), ai_response
-            
-            print("LLM Error:", resp.status_code, resp.text)
+
             return self.get_fallback_analysis(window_info), ai_response
 
         except Exception as e:
-            print("LLM Exception2:", str(e))
+            print("LLM Exception:", str(e))
             return self.get_fallback_analysis(window_info), "Some Exception"
-
 
     def get_fallback_analysis(self, window_info: Dict) -> Dict:
         app = (window_info['application'] or "").lower()
@@ -310,6 +375,46 @@ class AITimeTracker:
         cur.close()
         conn.close()
 
+    def log_idle_activity(self):
+        # If no idle start time has been set, don't log idle activity
+        if not self.idle_start_time:
+            self.idle_start_time = time.time()  # Mark the start time of idle activity
+
+        # Calculate the idle duration (time since the user went idle)
+        total_idle_duration = (time.time() - self.idle_start_time) / 60.0  # Convert to minutes
+
+        # Only log idle activity if idle duration exceeds the threshold and it's not too small
+        if total_idle_duration < (self.idle_threshold / 60.0):  # Convert threshold to minutes
+            return  # Avoid logging if idle duration is less than the threshold
+
+        # If idle activity has already been logged, return without logging it again
+        if self.current_session and self.current_session.application == "Idle":
+            return
+
+        # Log idle activity into the system (save to database)
+        idle_activity = ActivitySession(
+            start_time=datetime.fromtimestamp(self.idle_start_time),  # Idle session start time
+            end_time=datetime.now(),
+            application="Idle",
+            window_title="User is idle",
+            screenshot_path="N/A",  # Optional: no screenshot needed for idle time
+            extracted_text="User is not active",
+            ai_analysis={},
+            client_identified="None",
+            category="Idle/Leisure",
+            productivity_score=0,  # Idle means no productivity
+            user_id=self.current_user_id or 0,
+            duration_minutes=total_idle_duration  # Set the correct duration in minutes
+        )
+
+        # Store the idle activity and include the calculated duration in the database
+        self.save_session(idle_activity)
+
+        # Optionally, log or print the idle activity with duration for monitoring purposes
+        print(f"Logged idle activity. Duration: {total_idle_duration:.2f} minutes.")
+
+
+
     def start_tracking_for_user(self, user_id: int):
         self.current_user_id = user_id
         self.start_tracking()
@@ -318,7 +423,13 @@ class AITimeTracker:
         self.is_tracking = True
         while self.is_tracking:
             window_info = self.get_active_window_info()
+            idle_time = time.time() - self.last_activity_time
 
+            # If the user is idle for more than the threshold, log idle activity
+            if idle_time > self.idle_threshold:
+                self.log_idle_activity()
+
+            # Continue tracking the user's activity
             if not self.current_session or self.current_session.window_title != window_info['window_title']:
                 if self.current_session:
                     self.current_session.end_time = datetime.now()
@@ -327,6 +438,8 @@ class AITimeTracker:
                 print("Screenshot Saved.")
                 extracted_text = self.extract_text_from_screen(screenshot_path)
                 ai_analysis, ai_response = self.analyze_content_with_gpt(window_info, extracted_text)
+                # print("AI ANALYSIS: *****************************")
+                # print(ai_analysis)
                 print("AI RESPONSE: ^^^^^^^^^^^^^^^^^^")
                 print(ai_response)
                 self.current_session = ActivitySession(
@@ -336,6 +449,7 @@ class AITimeTracker:
                     window_title=window_info['window_title'],
                     screenshot_path=screenshot_path,
                     extracted_text=extracted_text,
+                    # ai_response=ai_response,
                     ai_analysis=ai_analysis,
                     client_identified = ai_analysis.get("client_name", "None") if isinstance(ai_analysis, dict) else "None",
                     category=ai_analysis.get("category", "Work"),
