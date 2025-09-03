@@ -1,147 +1,161 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, Activity, Users, BarChart3, Calendar, Eye, Zap, X } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import {
+  Clock,
+  Activity,
+  Users,
+  BarChart3,
+  Eye,
+  Zap,
+} from "lucide-react";
 import { useAuth } from "./AuthContext";
 import ManualEntryForm from "./components/ManualEntryForm";
-import { BASE_URL } from "./config"; // ✅ import the BASE_URL
-
-
+import { BASE_URL } from "./config";
 
 const AITimeTracker = () => {
-  // Fetch activities from backend
   const { authFetch } = useAuth();
   const [activities, setActivities] = useState([]);
   const [currentActivity, setCurrentActivity] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
   const [summary, setSummary] = useState({
     totalTime: 0,
     productiveTime: 0,
     clientsWorkedWith: 0,
-    averageProductivity: 0
+    averageProductivity: 0,
   });
-
-  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
 
   // Fetch activities from backend
   const fetchActivities = async (date) => {
+    setLoading(true);
     try {
       const response = await authFetch(
         `${BASE_URL}/api/activities?date=${date}`
       );
-      if (!response) return; // auto logged out
+      if (!response) return;
       const data = await response.json();
       setActivities(data);
       calculateSummary(data);
     } catch (error) {
       console.error("Error fetching activities:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   // Calculate daily summary
   const calculateSummary = (activities) => {
-    let totalTime = activities.reduce((sum, activity) => sum + (activity.duration_minutes || 0), 0);
+    let totalTime = activities.reduce(
+      (sum, activity) => sum + (activity.duration_minutes || 0),
+      0
+    );
     let productiveTime = activities
-      .filter(activity => activity.productivity_score >= 7)
+      .filter((activity) => activity.productivity_score >= 7)
       .reduce((sum, activity) => sum + (activity.duration_minutes || 0), 0);
 
-    // ✅ Cap total time at 24 hours (1440 minutes)
     if (totalTime > 1440) totalTime = 1440;
     if (productiveTime > 1440) productiveTime = 1440;
 
     const uniqueClients = new Set(
       activities
-        .map(activity => activity.client_identified)
-        .filter(client => client && client !== 'None')
+        .map((activity) => activity.client_identified)
+        .filter((client) => client && client !== "None")
     );
 
     setSummary({
-      totalTime: Math.round(totalTime / 60 * 100) / 100, // Convert to hours
-      productiveTime: Math.round(productiveTime / 60 * 100) / 100,
+      totalTime: Math.round((totalTime / 60) * 100) / 100,
+      productiveTime: Math.round((productiveTime / 60) * 100) / 100,
       clientsWorkedWith: uniqueClients.size,
-      averageProductivity: totalTime > 0 
-        ? Math.round((productiveTime / totalTime) * 10 * 10) / 10
-        : 0
+      averageProductivity:
+        totalTime > 0
+          ? Math.round((productiveTime / totalTime) * 10 * 10) / 10
+          : 0,
     });
   };
 
+  // Start/Stop tracking
+  const toggleTracking = async () => {
+    try {
+      const endpoint = isTracking
+        ? `${BASE_URL}/api/stop-tracking`
+        : `${BASE_URL}/api/start-tracking`;
 
-    // Start/Stop tracking
-    const toggleTracking = async () => {
-      try {
-        const endpoint = isTracking
-          ? `${BASE_URL}/api/stop-tracking`
-          : `${BASE_URL}/api/start-tracking`;
+      const response = await authFetch(endpoint, {
+        method: "POST",
+      });
 
-        const response = await authFetch(endpoint, {
-          method: "POST",
-        });
-
-        if (response && response.ok) {
-          setIsTracking(!isTracking);
-        }
-      } catch (error) {
-        console.error("Error toggling tracking:", error);
+      if (response && response.ok) {
+        setIsTracking(!isTracking);
       }
-    };
+    } catch (error) {
+      console.error("Error toggling tracking:", error);
+    }
+  };
 
   useEffect(() => {
     fetchActivities(selectedDate);
   }, [selectedDate]);
 
-  // Format duration
+  // Utils
   const formatDuration = (minutes) => {
     if (!minutes) return "0m";
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-
-    // For fractional minutes (like 0.5)
     if (hours === 0 && mins < 1) {
-      return `${minutes.toFixed(2)}m`;   // ✅ max 2 decimals
+      return `${minutes.toFixed(2)}m`;
     }
-
-    return hours > 0
-      ? `${hours}h ${Math.round(mins)}m`
-      : `${Math.round(mins)}m`;
+    return hours > 0 ? `${hours}h ${Math.round(mins)}m` : `${Math.round(mins)}m`;
   };
 
-
-  // Get productivity color
   const getProductivityColor = (score) => {
-    if (score >= 8) return 'bg-green-100 text-green-800 border-green-300';
-    if (score >= 6) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    if (score >= 4) return 'bg-orange-100 text-orange-800 border-orange-300';
-    return 'bg-red-100 text-red-800 border-red-300';
+    if (score >= 8)
+      return "bg-green-100 text-green-800 border-green-300";
+    if (score >= 6)
+      return "bg-yellow-100 text-yellow-800 border-yellow-300";
+    if (score >= 4)
+      return "bg-orange-100 text-orange-800 border-orange-300";
+    return "bg-red-100 text-red-800 border-red-300";
   };
 
-  // Get status color
   const getStatusColor = (status) => {
     switch ((status || "").toLowerCase()) {
-      case "completed": return "bg-green-100 text-green-800 border-green-300";
-      case "billed": return "bg-purple-100 text-purple-800 border-purple-300";
-      case "in progress": return "bg-gray-100 text-gray-800 border-gray-300";
-      default: return "bg-gray-100 text-gray-800 border-gray-300";
+      case "completed":
+        return "bg-green-100 text-green-800 border-green-300";
+      case "billed":
+        return "bg-purple-100 text-purple-800 border-purple-300";
+      case "in progress":
+        return "bg-gray-100 text-gray-800 border-gray-300";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-300";
     }
   };
 
-  // Get entry type color
   const getEntryTypeColor = (entryType) => {
-    switch ((entryType || "")) {
-      case "Manual Entry": return "bg-purple-100 text-purple-800 border-purple-300";
-      case "Automated Entry": return "bg-yellow-100 text-yellow-800 border-yellow-300";
-      default: return "bg-gray-100 text-gray-800 border-gray-300";
+    switch (entryType || "") {
+      case "Manual Entry":
+        return "bg-purple-100 text-purple-800 border-purple-300";
+      case "Automated Entry":
+        return "bg-yellow-100 text-yellow-800 border-yellow-300";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-300";
     }
   };
 
-
-  // Get category icon
   const getCategoryIcon = (category) => {
     switch (category?.toLowerCase()) {
-      case 'work': return <BarChart3 className="w-4 h-4" />;
-      case 'communication': return <Users className="w-4 h-4" />;
-      case 'social': return <Users className="w-4 h-4" />;
-      case 'research': return <Eye className="w-4 h-4" />;
-      default: return <Activity className="w-4 h-4" />;
+      case "work":
+        return <BarChart3 className="w-4 h-4" />;
+      case "communication":
+        return <Users className="w-4 h-4" />;
+      case "social":
+        return <Users className="w-4 h-4" />;
+      case "research":
+        return <Eye className="w-4 h-4" />;
+      default:
+        return <Activity className="w-4 h-4" />;
     }
   };
 
@@ -156,9 +170,11 @@ const AITimeTracker = () => {
                 <Clock className="text-blue-600" />
                 AI Time Tracker
               </h1>
-              <p className="text-gray-600 mt-1">Intelligent activity monitoring with client detection</p>
+              <p className="text-gray-600 mt-1">
+                Intelligent activity monitoring with client detection
+              </p>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <input
                 type="date"
@@ -166,16 +182,16 @@ const AITimeTracker = () => {
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
-              
+
               <button
                 onClick={toggleTracking}
                 className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                  isTracking 
-                    ? 'bg-red-500 hover:bg-red-600 text-white' 
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  isTracking
+                    ? "bg-red-500 hover:bg-red-600 text-white"
+                    : "bg-blue-500 hover:bg-blue-600 text-white"
                 }`}
               >
-                {isTracking ? '⏹️ Stop Tracking' : '▶️ Start Tracking'}
+                {isTracking ? "⏹️ Stop Tracking" : "▶️ Start Tracking"}
               </button>
 
               <button
@@ -204,7 +220,9 @@ const AITimeTracker = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Time</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.totalTime}h</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {summary.totalTime}h
+                </p>
               </div>
               <Clock className="w-8 h-8 text-blue-500" />
             </div>
@@ -212,8 +230,12 @@ const AITimeTracker = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Productive Time</p>
-                <p className="text-2xl font-bold text-green-600">{summary.productiveTime}h</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Productive Time
+                </p>
+                <p className="text-2xl font-bold text-green-600">
+                  {summary.productiveTime}h
+                </p>
               </div>
               <Zap className="w-8 h-8 text-green-500" />
             </div>
@@ -222,30 +244,34 @@ const AITimeTracker = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Clients</p>
-                <p className="text-2xl font-bold text-purple-600">{summary.clientsWorkedWith}</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {summary.clientsWorkedWith}
+                </p>
               </div>
               <Users className="w-8 h-8 text-purple-500" />
             </div>
           </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Productivity</p>
-                  <p
-                    className={`text-2xl font-bold ${
-                      summary.averageProductivity <= 5
-                        ? "text-red-600"
-                        : summary.averageProductivity < 8
-                        ? "text-yellow-600"
-                        : "text-green-600"
-                    }`}
-                  >
-                    {summary.averageProductivity}/10
-                  </p>
-                </div>
-                <BarChart3 className="w-8 h-8 text-orange-500" />
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Avg Productivity
+                </p>
+                <p
+                  className={`text-2xl font-bold ${
+                    summary.averageProductivity <= 5
+                      ? "text-red-600"
+                      : summary.averageProductivity < 8
+                      ? "text-yellow-600"
+                      : "text-green-600"
+                  }`}
+                >
+                  {summary.averageProductivity}/10
+                </p>
               </div>
+              <BarChart3 className="w-8 h-8 text-orange-500" />
             </div>
+          </div>
         </div>
 
         {/* Activities List */}
@@ -257,29 +283,38 @@ const AITimeTracker = () => {
           </div>
 
           <div className="divide-y divide-gray-200">
-            {activities.length === 0 ? (
+            {loading ? (
+              <div className="p-8 text-center text-gray-500">
+                <Activity className="w-12 h-12 mx-auto mb-4 animate-spin opacity-50" />
+                <p>Loading activities...</p>
+              </div>
+            ) : activities.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No activities recorded for this date</p>
               </div>
             ) : (
               activities.map((activity) => {
-                console.log("Activity:", activity); // Debugging line
                 let aiAnalysis = {};
                 if (typeof activity.ai_analysis === "string") {
                   try {
                     aiAnalysis = JSON.parse(activity.ai_analysis);
-                  } catch (e) {
+                  } catch {
                     aiAnalysis = {};
                   }
-                } else if (typeof activity.ai_analysis === "object" && activity.ai_analysis !== null) {
+                } else if (
+                  typeof activity.ai_analysis === "object" &&
+                  activity.ai_analysis !== null
+                ) {
                   aiAnalysis = activity.ai_analysis;
                 }
 
                 return (
                   <div
                     key={activity.id}
-                    onClick={() => setCurrentActivity({ ...activity, aiAnalysis })}
+                    onClick={() =>
+                      setCurrentActivity({ ...activity, aiAnalysis })
+                    }
                     className="p-6 hover:bg-gray-50 cursor-pointer"
                   >
                     <div className="flex items-start justify-between">
@@ -292,30 +327,38 @@ const AITimeTracker = () => {
                             <h3 className="font-semibold text-gray-900">
                               {activity.application}
                             </h3>
-                            <span className={`px-2 py-1 text-xs border rounded-full ${getProductivityColor(activity.productivity_score)}`}>
+                            <span
+                              className={`px-2 py-1 text-xs border rounded-full ${getProductivityColor(
+                                activity.productivity_score
+                              )}`}
+                            >
                               Productivity: {activity.productivity_score}/10
                             </span>
-                            {/* ✅ Show entry_type always */}
                             {activity.entry_type && (
                               <span
-                                className={`px-2 py-1 text-xs border rounded-full ${getEntryTypeColor(activity.entry_type)}`}
+                                className={`px-2 py-1 text-xs border rounded-full ${getEntryTypeColor(
+                                  activity.entry_type
+                                )}`}
                               >
                                 {activity.entry_type}
                               </span>
                             )}
-                            {/* ✅ Only show status if NOT automated */}
-                              {activity.entry_type !== "Automated Entry" && activity.status && (
+                            {activity.entry_type !== "Automated Entry" &&
+                              activity.status && (
                                 <span
-                                  className={`px-2 py-1 text-xs border rounded-full ${getStatusColor(activity.status)}`}
+                                  className={`px-2 py-1 text-xs border rounded-full ${getStatusColor(
+                                    activity.status
+                                  )}`}
                                 >
                                   {activity.status}
                                 </span>
                               )}
-                            {activity.client_identified && activity.client_identified !== 'None' && (
-                              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 border border-blue-300 rounded-full">
-                                Client: {activity.client_identified}
-                              </span>
-                            )}
+                            {activity.client_identified &&
+                              activity.client_identified !== "None" && (
+                                <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 border border-blue-300 rounded-full">
+                                  Client: {activity.client_identified}
+                                </span>
+                              )}
                           </div>
                           <p className="text-gray-600 text-sm mb-2">
                             {activity.window_title}
@@ -329,8 +372,15 @@ const AITimeTracker = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-gray-500">
-                          {new Date(activity.start_time).toLocaleTimeString()} - 
-                          {activity.end_time ? new Date(activity.end_time).toLocaleTimeString() : 'Ongoing'}
+                          {new Date(
+                            activity.start_time
+                          ).toLocaleTimeString()}{" "}
+                          -{" "}
+                          {activity.end_time
+                            ? new Date(
+                                activity.end_time
+                              ).toLocaleTimeString()
+                            : "Ongoing"}
                         </p>
                         <p className="font-medium text-gray-900">
                           {formatDuration(activity.duration_minutes || 0)}
@@ -343,7 +393,7 @@ const AITimeTracker = () => {
             )}
           </div>
         </div>
-        
+
         {/* Manual Entry Modal */}
         {showManualForm && (
           <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
@@ -354,20 +404,15 @@ const AITimeTracker = () => {
               >
                 ✖
               </button>
-              {/* <h1 className="text-lg font-bold text-gray-900 mb-4">AI Time Tracker</h1> */}
-              {/* <h1 className="text-3xl font-bold text-blue-600 mb-4">AI Time Tracker</h1> */}
-
-
               <ManualEntryForm
                 onEntryAdded={() => {
                   setShowManualForm(false);
-                  fetchActivities(selectedDate); // refresh after new entry
+                  fetchActivities(selectedDate);
                 }}
               />
             </div>
           </div>
         )}
-
 
         {/* Activity Detail Modal */}
         {currentActivity && (
@@ -379,39 +424,43 @@ const AITimeTracker = () => {
               >
                 ✖
               </button>
-
               <h3 className="text-xl font-bold text-gray-900 mb-4">
                 {currentActivity.application} – Details
               </h3>
-
               <div className="space-y-3 text-sm text-gray-700 max-h-[70vh] overflow-y-auto pr-2">
-                <p><span className="font-semibold">Application:</span> {currentActivity.application || ""}</p>
-                <p><span className="font-semibold">Window Title:</span> {currentActivity.window_title || ""}</p>
-                {currentActivity.entry_type !== "Automated Entry" && (
                 <p>
-                  <span className="font-semibold">Status:</span>{" "}
-                  {currentActivity.status || "Unknown"}
+                  <span className="font-semibold">Application:</span>{" "}
+                  {currentActivity.application || ""}
                 </p>
-              )}
-
-                {/* <p><span className="font-semibold">Client:</span> {currentActivity.client_identified}</p> */}
-                <p><span className="font-semibold">Duration:</span> {formatDuration(currentActivity.duration_minutes || 0)}</p>
-                <p><span className="font-semibold">Productivity:</span> {currentActivity.productivity_score}/10</p>
-                {/* <p><span className="font-semibold">Category:</span> {currentActivity.category}</p> */}
-                {/* <p><span className="font-semibold">Description:</span> {currentActivity.aiAnalysis?.description || "No description"}</p> */}
-
+                <p>
+                  <span className="font-semibold">Window Title:</span>{" "}
+                  {currentActivity.window_title || ""}
+                </p>
+                {currentActivity.entry_type !== "Automated Entry" && (
+                  <p>
+                    <span className="font-semibold">Status:</span>{" "}
+                    {currentActivity.status || "Unknown"}
+                  </p>
+                )}
+                <p>
+                  <span className="font-semibold">Duration:</span>{" "}
+                  {formatDuration(currentActivity.duration_minutes || 0)}
+                </p>
+                <p>
+                  <span className="font-semibold">Productivity:</span>{" "}
+                  {currentActivity.productivity_score}/10
+                </p>
                 <div className="pt-2 border-t">
                   <p className="font-semibold mb-1">AI Response:</p>
                   <pre className="text-xs bg-gray-100 p-3 rounded-md whitespace-pre-wrap break-words">
-                    {JSON.stringify(currentActivity.aiAnalysis, null, 2) || "No AI analysis"}
+                    {JSON.stringify(currentActivity.aiAnalysis, null, 2) ||
+                      "No AI analysis"}
                   </pre>
                 </div>
               </div>
             </div>
           </div>
         )}
-
-
       </div>
     </div>
   );

@@ -247,6 +247,7 @@ def get_activities(
     user_id: Optional[int] = Query(None, description="Admin only: view someone else"),
     current_user: UserOut = Depends(get_current_user)
 ):
+    print("Started get_activities...")
     target_user_id = current_user.id
     print("Filtering for User ID = {}, Date = {}".format(target_user_id, date))
 
@@ -309,6 +310,7 @@ def get_activities(
 
         results.append(rec)
 
+    print("Ended get_activities")
     return results
 
 

@@ -342,8 +342,6 @@ class AITimeTracker:
             print("LLM Exception:", str(e))
             return self.get_fallback_analysis(window_info), "Some Exception"
 
-
-
     def get_fallback_analysis(self, window_info: Dict) -> Dict:
         app = (window_info['application'] or "").lower()
         if "word" in app or "excel" in app or 'teams' in app:
