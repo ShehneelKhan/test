@@ -240,6 +240,11 @@ def stop_tracking(current_user: UserOut = Depends(get_current_user)):
     print("Tracker stopped by user ID:", current_user.id)
     return {"status": "tracking_stopped"}
 
+@app.get("/api/tracking-status")
+def tracking_status():
+    return {"is_tracking": tracker.is_active}
+
+
 # ====== Data endpoints ======
 @app.get("/api/activities")
 def get_activities(

@@ -76,6 +76,20 @@ const AITimeTracker = () => {
     });
   };
 
+  // Fetch tracking status from backend
+const fetchTrackingStatus = async () => {
+  try {
+    const response = await authFetch(`${BASE_URL}/api/tracking-status`);
+    if (response && response.ok) {
+      const data = await response.json();
+      setIsTracking(data.is_tracking);
+    }
+  } catch (error) {
+    console.error("Error fetching tracking status:", error);
+  }
+};
+
+
   // Start/Stop tracking
   const toggleTracking = async () => {
     try {
@@ -96,6 +110,7 @@ const AITimeTracker = () => {
   };
 
   useEffect(() => {
+    fetchTrackingStatus();   // ✅ run once when app loads
     fetchActivities(selectedDate);
   }, [selectedDate]);
 
