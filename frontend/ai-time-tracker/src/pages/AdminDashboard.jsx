@@ -1,17 +1,12 @@
 // src/pages/AdminDashboard.jsx
 import React, { useEffect, useState } from "react";
 import { Clock, Activity, Users, BarChart3, Eye, Zap } from "lucide-react";
-import { BASE_URL } from "../config"; // ✅ import the BASE_URL
+import { BASE_URL } from "../config";
 import { useNavigate } from "react-router-dom";
-import ClientList from "../components/ClientList";
 import axios from "axios";
-
 
 export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
-  const [showClientForm, setShowClientForm] = useState(false);
-  const [clientName, setClientName] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const navigate = useNavigate();
   const [selectedUser, setSelectedUser] = useState(null);
@@ -29,91 +24,136 @@ export default function AdminDashboard() {
   });
   const [currentActivity, setCurrentActivity] = useState(null);
 
+  // --- Client Management state ---
+  const [clients, setClients] = useState([]);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [clientForm, setClientForm] = useState({ name: "", contact_email: "" });
+
   // ✅ Fetch all users on mount
-useEffect(() => {
-  fetch(`${BASE_URL}/api/admin/users`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-    },
-  })
-    .then((res) => {
-      if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
-      return res.json();
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/admin/users`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
     })
-    .then((data) => {
-      console.log("Fetched users:", data); // 👀 debug what API returns
-      if (Array.isArray(data)) {
-        setUsers(data);
-      } else if (data && typeof data === "object" && data.users) {
-        // if backend wraps it like { users: [...] }
-        setUsers(data.users);
-      } else {
-        setUsers([]);
-      }
-    })
-    .catch((err) => {
-      console.error("Error fetching users:", err);
-      setUsers([]);
-    });
-}, []);
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setUsers(data);
+        } else if (data?.users) {
+          setUsers(data.users);
+        }
+      })
+      .catch(() => setUsers([]));
+  }, []);
 
-
-
-  // ✅ Fetch activities & screenshots when user or date changes
+  // ✅ Fetch activities & screenshots when user/date changes
   useEffect(() => {
     if (!selectedUser) return;
 
     const token = localStorage.getItem("token");
 
-    // Fetch activities
+    // Activities
     fetch(
       `${BASE_URL}/api/admin/users/${selectedUser.id}/activities-by-date?date=${selectedDate}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     )
       .then((res) => res.json())
       .then((data) => {
         setActivities(data || []);
-        calculateSummary(data);
-      })
-      .catch((err) => console.error("Error fetching activities:", err));
+        calculateSummary(data || []);
+      });
 
-    // Fetch screenshots
+    // Screenshots
     fetch(
       `${BASE_URL}/api/admin/users/${selectedUser.id}/screenshots-by-date?date=${selectedDate}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     )
       .then((res) => res.json())
-      .then((data) => setScreenshots(data || []))
-      .catch((err) => console.error("Error fetching screenshots:", err));
+      .then((data) => setScreenshots(data || []));
   }, [selectedUser, selectedDate]);
 
+  // ✅ Fetch Clients
+  const fetchClients = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/api/clients`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setClients(res.data);
+    } catch (err) {
+      console.error("Failed to fetch clients:", err);
+      setClients([]);
+    }
+  };
 
-  // ✅ Calculate summary like App.js
+  useEffect(() => {
+    if (activeTab === "clients") {
+      fetchClients();
+    }
+  }, [activeTab]);
+
+  // ✅ Add/Edit Client
+  const handleClientSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingClient) {
+        await axios.put(`${BASE_URL}/api/clients/${editingClient.id}`, clientForm, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+      } else {
+        await axios.post(`${BASE_URL}/api/clients`, clientForm, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+      }
+      fetchClients();
+      setShowClientModal(false);
+      setEditingClient(null);
+      setClientForm({ name: "", contact_email: "" });
+    } catch (err) {
+      console.error("Error saving client:", err);
+    }
+  };
+
+  const handleEditClient = (client) => {
+    setEditingClient(client);
+    setClientForm({ name: client.name, contact_email: client.contact_email });
+    setShowClientModal(true);
+  };
+
+  const handleDeleteClient = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this client?")) return;
+    try {
+      await axios.delete(`${BASE_URL}/api/clients/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      fetchClients();
+    } catch (err) {
+      console.error("Error deleting client:", err);
+    }
+  };
+
+  // ✅ Summary Calculation
   const calculateSummary = (activities) => {
-    const totalTime = activities.reduce(
+    let totalTime = activities.reduce(
       (sum, activity) => sum + (activity.duration_minutes || 0),
       0
     );
-    const productiveTime = activities
+    let productiveTime = activities
       .filter((activity) => activity.productivity_score >= 7)
       .reduce((sum, activity) => sum + (activity.duration_minutes || 0), 0);
 
+    if (totalTime > 1440) totalTime = 1440;
+    if (productiveTime > 1440) productiveTime = 1440;
+
     const uniqueClients = new Set(
-      activities
-        .map((activity) => activity.client_identified)
-        .filter((client) => client && client !== "None")
+      activities.map((a) => a.client_identified).filter((c) => c && c !== "None")
     );
 
     const avgProductivity =
       activities.length > 0
-        ? activities.reduce(
-            (sum, activity) => sum + activity.productivity_score,
-            0
-          ) / activities.length
+        ? activities.reduce((sum, a) => sum + a.productivity_score, 0) /
+          activities.length
         : 0;
 
     setSummary({
@@ -127,7 +167,7 @@ useEffect(() => {
     });
   };
 
-  // ✅ Helpers copied from App.js
+  // ✅ Helpers
   const formatDuration = (minutes) => {
     if (!minutes) return "0m";
     const hours = Math.floor(minutes / 60);
@@ -185,63 +225,6 @@ useEffect(() => {
   };
 
 
-  // --- Client Management state ---
-const [clients, setClients] = useState([]);
-const [showClientModal, setShowClientModal] = useState(false);
-const [editingClient, setEditingClient] = useState(null);
-const [clientForm, setClientForm] = useState({ name: "", contact_email: "" });
-
-// --- Fetch Clients ---
-const fetchClients = async () => {
-  try {
-    const res = await axios.get("/api/clients");
-    setClients(res.data);
-  } catch (err) {
-    console.error("Failed to fetch clients:", err);
-  }
-};
-
-useEffect(() => {
-  fetchClients();
-}, []);
-
-// --- Add/Edit Submit ---
-const handleClientSubmit = async (e) => {
-  e.preventDefault();
-  try {
-    if (editingClient) {
-      // Update existing client
-      await axios.put(`/api/clients/${editingClient.id}`, clientForm);
-    } else {
-      // Create new client
-      await axios.post("/api/clients", clientForm);
-    }
-    fetchClients();
-    setShowClientModal(false);
-    setEditingClient(null);
-    setClientForm({ name: "", contact_email: "" });
-  } catch (err) {
-    console.error("Error saving client:", err);
-  }
-};
-
-// --- Edit ---
-const handleEditClient = (client) => {
-  setEditingClient(client);
-  setClientForm({ name: client.name, contact_email: client.contact_email });
-  setShowClientModal(true);
-};
-
-// --- Delete ---
-const handleDeleteClient = async (id) => {
-  if (!window.confirm("Are you sure you want to delete this client?")) return;
-  try {
-    await axios.delete(`/api/clients/${id}`);
-    fetchClients();
-  } catch (err) {
-    console.error("Error deleting client:", err);
-  }
-};
 
 
 return (
@@ -257,7 +240,7 @@ return (
               : "bg-gray-200 hover:bg-gray-300"
           }`}
         >
-          👤 Manage Users
+          👤 User Activities
         </button>
         <button
           onClick={() => setActiveTab("clients")}
@@ -269,6 +252,18 @@ return (
         >
           🏢 Manage Clients
         </button>
+
+
+        <button
+          onClick={() => {
+            localStorage.removeItem("token");
+            window.location.href = "/login";
+          }}
+          className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-800 text-white"
+        >
+          Logout
+        </button>
+
       </div>
 
       {activeTab === "users" && (
@@ -289,48 +284,6 @@ return (
                   }`}
                 >
                   {u.name || u.email}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-
-      {activeTab === "clients" && (
-        <>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold">Clients</h2>
-            <button
-              onClick={() => setShowClientModal(true)}
-              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
-            >
-              + Add Client
-            </button>
-          </div>
-          {clients.length === 0 ? (
-            <p>No clients found.</p>
-          ) : (
-            <ul className="space-y-2">
-              {clients.map((c) => (
-                <li
-                  key={c.id}
-                  className="p-2 rounded flex justify-between items-center bg-white shadow-sm"
-                >
-                  <span>{c.name}</span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditClient(c)}
-                      className="px-2 py-1 text-xs bg-blue-500 text-white rounded"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClient(c.id)}
-                      className="px-2 py-1 text-xs bg-red-500 text-white rounded"
-                    >
-                      Delete
-                    </button>
-                  </div>
                 </li>
               ))}
             </ul>
@@ -588,6 +541,7 @@ return (
                       ✖
                     </button>
 
+
                     <h3 className="text-xl font-bold text-gray-900 mb-4">
                       {currentActivity.application} – Details
                     </h3>
@@ -632,7 +586,7 @@ return (
         </>
       )}
 
-      {/* ===== CLIENT MANAGEMENT PANEL ===== */}
+
 {/* ✅ Client Management Section */}
 {activeTab === "clients" && (
   <div>
