@@ -16,4 +16,4 @@ pydantic[email]
 python-multipart
 psycopg2-binary
 pynput
-mss
+pillow

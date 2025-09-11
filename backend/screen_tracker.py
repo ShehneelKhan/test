@@ -139,17 +139,22 @@ class AITimeTracker:
         path = f"screenshots/screenshot_{timestamp}.png"
 
         if sys.platform == "win32" or sys.platform == "darwin":
-            # Windows / macOS
+            from PIL import ImageGrab
             ImageGrab.grab().save(path)
         else:
-            # Linux (headless safe)
-            with mss.mss() as sct:
-                monitor = sct.monitors[0]  # full screen
-                sct_img = sct.grab(monitor)
-                img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-                img.save(path)
+            if "DISPLAY" not in os.environ:
+                print("⚠️ No DISPLAY available — skipping screenshot.")
+                # create blank image instead
+                Image.new("RGB", (800, 600), color=(73, 109, 137)).save(path)
+            else:
+                import mss
+                with mss.mss() as sct:
+                    monitor = sct.monitors[0]
+                    sct_img = sct.grab(monitor)
+                    img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+                    img.save(path)
 
-        # Save metadata in DB
+        # save metadata in DB
         conn = self.db()
         cur = conn.cursor()
         cur.execute("""
@@ -161,6 +166,7 @@ class AITimeTracker:
         conn.close()
 
         return path
+
 
     def extract_text_from_screen(self, screenshot_path: str) -> str:
         try:
