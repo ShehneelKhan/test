@@ -198,7 +198,7 @@ const fetchTrackingStatus = async () => {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
 
-              <button
+              {/* <button
                 onClick={toggleTracking}
                 className={`px-6 py-2 rounded-lg font-medium transition-colors ${
                   isTracking
@@ -207,7 +207,7 @@ const fetchTrackingStatus = async () => {
                 }`}
               >
                 {isTracking ? "⏹️ Stop Tracking" : "▶️ Start Tracking"}
-              </button>
+              </button> */}
 
               <button
                 onClick={() => setShowManualForm(true)}
