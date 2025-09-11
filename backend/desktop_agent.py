@@ -7,6 +7,7 @@ import psutil
 import win32gui, win32process  # only works on Windows
 
 API_BASE = "https://test-8d3m.onrender.com"
+# API_BASE = "http://127.0.0.1:8000"
 EMAIL = "shehneel.khan@datapillar.co.uk"
 PASSWORD = "abcd1234"
 

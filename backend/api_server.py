@@ -43,6 +43,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Check if the 'screenshots' directory exists and mount the static files
+if os.path.isdir("screenshots"):
+    print("Screenshots directory found. Mounting static files...")
+    app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+else:
+    print("Screenshots directory not found!")
+
 # ====== Tracker (single instance per machine) ======
 tracker = AITimeTracker()  # removed db_path param
 tracking_thread: Optional[threading.Thread] = None
@@ -820,23 +827,36 @@ async def upload_screenshot(
     current_user: UserOut = Depends(get_current_user)
 ):
     try:
+        # Ensure the screenshots directory exists
         os.makedirs("screenshots", exist_ok=True)
         file_path = f"screenshots/{timestamp}_{screenshot.filename}"
 
-        # Save screenshot
+        # Log the file path for debugging
+        print(f"Saving screenshot to: {file_path}")
+
+        # Save the screenshot
         with open(file_path, "wb") as f:
             f.write(await screenshot.read())
+        
+        # Log after file is saved
+        print(f"Screenshot saved successfully to: {file_path}")
 
         # Run AI analysis
+        # print("Running AI analysis...")
         extracted_text = tracker.extract_text_from_screen(file_path)
         ai_analysis, ai_response = tracker.analyze_content_with_gpt(
             {"application": application, "window_title": window_title},
             extracted_text
         )
 
+        # print(f"AI analysis complete: {ai_analysis}")
+
+        # Connect to the database
         conn = db()
         cur = conn.cursor()
 
+        # Log the SQL query execution
+        # print("Checking the last activity for the user...")
         # 🔍 Check last activity for this user
         cur.execute("""
             SELECT id, application, window_title, end_time
@@ -850,6 +870,7 @@ async def upload_screenshot(
         if last_activity and last_activity[1] == application and last_activity[2] == window_title:
             # ✅ Same window → just update end_time + duration
             activity_id = last_activity[0]
+            # print(f"Updating existing activity (ID: {activity_id})...")
             cur.execute("""
                 UPDATE activities
                 SET end_time = NOW(),
@@ -868,10 +889,11 @@ async def upload_screenshot(
                 ai_analysis.get("productivity_level", 5),
                 activity_id
             ))
-
+            # print(f"Activity {activity_id} updated.")
         else:
             # 🆕 New window → close the previous activity (if any)
             if last_activity and last_activity[3] is None:
+                # print(f"Closing last activity (ID: {last_activity[0]}) due to new window...")
                 cur.execute("""
                     UPDATE activities
                     SET end_time = NOW(),
@@ -880,6 +902,7 @@ async def upload_screenshot(
                 """, (last_activity[0],))
 
             # Start a new activity (end_time = NULL for now)
+            # print("Starting a new activity...")
             cur.execute("""
                 INSERT INTO activities (
                     user_id, start_time, application, window_title,
@@ -901,8 +924,10 @@ async def upload_screenshot(
                 ai_analysis.get("productivity_level", 5)
             ))
             activity_id = cur.fetchone()[0]
+            # print(f"New activity started with ID: {activity_id}")
 
         # 📸 Always log screenshot
+        print("Logging screenshot...")
         cur.execute("""
             INSERT INTO screenshots (user_id, activity_id, path, taken_at)
             VALUES (%s, %s, %s, NOW())
@@ -912,17 +937,19 @@ async def upload_screenshot(
         cur.close()
         conn.close()
 
+        # Return response with the screenshot path and activity ID
         return {
             "status": "success",
-            # "path": file_path,
             "path": f"/screenshots/{os.path.basename(file_path)}",
             "activity_id": activity_id,
             "ai_analysis": ai_analysis
         }
 
     except Exception as e:
-        print("❌ Upload error:", str(e))
+        # Log any exceptions
+        print(f"❌ Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 
 

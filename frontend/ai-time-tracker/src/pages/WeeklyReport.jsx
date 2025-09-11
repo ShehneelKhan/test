@@ -202,29 +202,6 @@ export default function WeeklyReport() {
         )}
       </div>
 
-      {/* Screenshots */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-semibold mb-4">Screenshots</h2>
-        {screenshots.length === 0 ? (
-          <p className="text-gray-500">No screenshots available</p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {screenshots.map((s) => (
-              <div key={s.id} className="border rounded-lg overflow-hidden shadow-sm">
-                <img
-                  src={`${BASE_URL}/${s.path}`}
-                  alt="Screenshot"
-                  className="w-full h-40 object-cover cursor-pointer"
-                  onClick={() => window.open(`${BASE_URL}/${s.path}`, "_blank")}
-                />
-                <p className="text-xs text-gray-500 p-2 text-center">
-                  {new Date(s.taken_at).toLocaleString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
