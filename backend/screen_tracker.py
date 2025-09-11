@@ -97,6 +97,17 @@ class AITimeTracker:
         )
         """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS screenshots (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                activity_id INTEGER REFERENCES activities(id) ON DELETE SET NULL,
+                path TEXT NOT NULL,
+                taken_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+
+
         conn.commit()
         cur.close()
         conn.close()

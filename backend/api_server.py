@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
-from .screen_tracker import AITimeTracker #Enter dot for deployment
+from .screen_tracker import AITimeTracker, ActivitySession #Enter dot for deployment
 import json
 # from api_server import AITimeTracker
 from jose.exceptions import ExpiredSignatureError
@@ -819,23 +819,44 @@ async def upload_screenshot(
     timestamp: str = Form(...),
     current_user: UserOut = Depends(get_current_user)
 ):
-    os.makedirs("screenshots", exist_ok=True)
-    file_path = f"screenshots/{timestamp}_{screenshot.filename}"
-    
-    with open(file_path, "wb") as f:
-        f.write(await screenshot.read())
+    try:
+        os.makedirs("screenshots", exist_ok=True)
+        file_path = f"screenshots/{timestamp}_{screenshot.filename}"
 
-    conn = db()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO screenshots (user_id, path, taken_at, activity_id)
-        VALUES (%s, %s, NOW(), NULL)
-    """, (current_user.id, file_path))
-    conn.commit()
-    cur.close()
-    conn.close()
+        # Save file
+        with open(file_path, "wb") as f:
+            f.write(await screenshot.read())
 
-    return {"status": "success", "path": file_path}
+        # Run AI analysis
+        extracted_text = tracker.extract_text_from_screen(file_path)
+        ai_analysis, ai_response = tracker.analyze_content_with_gpt(
+            {"application": application, "window_title": window_title},
+            extracted_text
+        )
+
+        # Create activity session
+        session = ActivitySession(
+            start_time=datetime.utcnow(),
+            end_time=datetime.utcnow(),
+            application=application,
+            window_title=window_title,
+            screenshot_path=file_path,
+            extracted_text=extracted_text,
+            ai_analysis=ai_analysis,
+            client_identified=ai_analysis.get("client_name", "None"),
+            category=ai_analysis.get("category", "Work"),
+            productivity_score=ai_analysis.get("productivity_level", 5),
+            user_id=current_user.id
+        )
+
+        tracker.save_session(session)
+
+        return {"status": "success", "path": file_path, "ai_analysis": ai_analysis}
+
+    except Exception as e:
+        print("❌ Upload error:", str(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 
 from fastapi.staticfiles import StaticFiles
