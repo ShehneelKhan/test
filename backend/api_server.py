@@ -16,7 +16,7 @@ from .screen_tracker import AITimeTracker, ActivitySession #Enter dot for deploy
 import json
 # from api_server import AITimeTracker
 from jose.exceptions import ExpiredSignatureError
-
+from fastapi.staticfiles import StaticFiles
 # print("Debug message", flush=True)
 
 
@@ -46,9 +46,12 @@ app.add_middleware(
 # Check if the 'screenshots' directory exists and mount the static files
 if os.path.isdir("screenshots"):
     print("Screenshots directory found. Mounting static files...")
-    app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+    app.mount("/screenshots", StaticFiles(directory="screenshots", check_dir=True), name="screenshots")
 else:
-    print("Screenshots directory not found!")
+    print("Screenshots directory not found! Creating it now...")
+    os.makedirs("screenshots", exist_ok=True)
+    app.mount("/screenshots", StaticFiles(directory="screenshots", check_dir=True), name="screenshots")
+
 
 # ====== Tracker (single instance per machine) ======
 tracker = AITimeTracker()  # removed db_path param
@@ -951,14 +954,10 @@ async def upload_screenshot(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+# from fastapi.staticfiles import StaticFiles
 
-
-
-
-from fastapi.staticfiles import StaticFiles
-
-if os.path.isdir("screenshots"):
-    app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+# if os.path.isdir("screenshots"):
+#     app.mount("/screenshots", StaticFiles(directory="screenshots", check_dir=True), name="screenshots")
 
 
 
