@@ -6,7 +6,15 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        "requests",
+        "PIL",
+        "psutil",
+        "psutil._common",
+        "psutil._compat",
+        "psutil._pswindows",
+        "pywin32",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -14,6 +22,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(

@@ -871,24 +871,26 @@ async def upload_screenshot(
             # 🆕 Create a new activity
             cur.execute("""
                 INSERT INTO activities (
-                    user_id, start_time, application, window_title,
+                    user_id, start_time, end_time, application, window_title,
                     screenshot_path, extracted_text, ai_analysis,
                     client_identified, category, productivity_score,
                     entry_type
                 )
-                VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Agent Upload')
+                VALUES (%s, NOW(), NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Agent Upload')
                 RETURNING id
-            """, (
-                current_user.id,
-                application,
-                window_title,
-                file_path,
-                extracted_text,
-                json.dumps(ai_analysis),
-                ai_analysis.get("client_name", "None"),
-                ai_analysis.get("category", "Work"),
-                ai_analysis.get("productivity_level", 5)
-            ))
+            """, 
+                (
+                    current_user.id,
+                    application,
+                    window_title,
+                    file_path,
+                    extracted_text,
+                    json.dumps(ai_analysis),
+                    ai_analysis.get("client_name", "None"),
+                    ai_analysis.get("category", "Work"),
+                    ai_analysis.get("productivity_level", 5)
+                )
+            )
             activity_id = cur.fetchone()[0]
 
         # 📸 Always save screenshot reference
