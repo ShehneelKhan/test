@@ -137,8 +137,19 @@ class AITimeTracker:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         os.makedirs("screenshots", exist_ok=True)
         path = f"screenshots/screenshot_{timestamp}.png"
-        ImageGrab.grab().save(path)
 
+        if sys.platform == "win32" or sys.platform == "darwin":
+            # Windows / macOS
+            ImageGrab.grab().save(path)
+        else:
+            # Linux (headless safe)
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]  # full screen
+                sct_img = sct.grab(monitor)
+                img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+                img.save(path)
+
+        # Save metadata in DB
         conn = self.db()
         cur = conn.cursor()
         cur.execute("""
