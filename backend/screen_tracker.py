@@ -10,7 +10,6 @@ import json
 from datetime import datetime
 import psutil
 import sys
-import mss
 if sys.platform == "win32":
     import win32gui
     import win32process

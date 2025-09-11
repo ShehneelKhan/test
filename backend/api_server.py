@@ -914,7 +914,8 @@ async def upload_screenshot(
 
         return {
             "status": "success",
-            "path": file_path,
+            # "path": file_path,
+            "path": f"/screenshots/{os.path.basename(file_path)}",
             "activity_id": activity_id,
             "ai_analysis": ai_analysis
         }

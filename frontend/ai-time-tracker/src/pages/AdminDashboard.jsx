@@ -494,7 +494,8 @@ return (
                         className="border rounded-lg overflow-hidden shadow-sm"
                       >
                         <img
-                          src={`${BASE_URL}/${s.path}`}
+                          // src={`${BASE_URL}/${s.path}`}
+                          src={`${BASE_URL}${s.path}`}   // no extra slash
                           alt="Screenshot"
                           className="w-full h-40 object-cover cursor-pointer"
                           onClick={() => setCurrentScreenshot(s)}
