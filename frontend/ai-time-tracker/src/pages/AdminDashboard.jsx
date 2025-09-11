@@ -495,7 +495,7 @@ return (
                       >
                         <img
                           // src={`${BASE_URL}/${s.path}`}
-                          src={`${BASE_URL}${s.path}`}   // no extra slash
+                          src={`${BASE_URL}/${s.path}`}   // no extra slash
                           alt="Screenshot"
                           className="w-full h-40 object-cover cursor-pointer"
                           onClick={() => setCurrentScreenshot(s)}
@@ -503,7 +503,7 @@ return (
                         <p className="text-xs text-gray-500 p-2 text-center">
                           {new Date(s.taken_at).toLocaleString()}
                         </p>
-                        {console.log(`${BASE_URL}${s.path}`)}
+                        {console.log(`${BASE_URL}/${s.path}`)}
                       </div>
                     ))}
                   </div>
