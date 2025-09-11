@@ -837,18 +837,19 @@ async def upload_screenshot(
         conn = db()
         cur = conn.cursor()
 
-        # 🔍 Check if an activity for this user + window is still open
+        # 🔍 Check last activity for this user
         cur.execute("""
-            SELECT id, start_time FROM activities
-            WHERE user_id = %s AND application = %s AND window_title = %s
+            SELECT id, application, window_title, end_time
+            FROM activities
+            WHERE user_id = %s
             ORDER BY start_time DESC
             LIMIT 1
-        """, (current_user.id, application, window_title))
-        row = cur.fetchone()
+        """, (current_user.id,))
+        last_activity = cur.fetchone()
 
-        if row:
-            # ✅ Update existing activity's end_time + duration
-            activity_id = row[0]
+        if last_activity and last_activity[1] == application and last_activity[2] == window_title:
+            # ✅ Same window → just update end_time + duration
+            activity_id = last_activity[0]
             cur.execute("""
                 UPDATE activities
                 SET end_time = NOW(),
@@ -867,33 +868,41 @@ async def upload_screenshot(
                 ai_analysis.get("productivity_level", 5),
                 activity_id
             ))
+
         else:
-            # 🆕 Create a new activity
+            # 🆕 New window → close the previous activity (if any)
+            if last_activity and last_activity[3] is None:
+                cur.execute("""
+                    UPDATE activities
+                    SET end_time = NOW(),
+                        duration_minutes = ROUND(EXTRACT(EPOCH FROM (NOW() - start_time)) / 60.0, 2)
+                    WHERE id = %s
+                """, (last_activity[0],))
+
+            # Start a new activity (end_time = NULL for now)
             cur.execute("""
                 INSERT INTO activities (
-                    user_id, start_time, end_time, application, window_title,
+                    user_id, start_time, application, window_title,
                     screenshot_path, extracted_text, ai_analysis,
                     client_identified, category, productivity_score,
                     entry_type
                 )
-                VALUES (%s, NOW(), NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Agent Upload')
+                VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Agent Upload')
                 RETURNING id
-            """, 
-                (
-                    current_user.id,
-                    application,
-                    window_title,
-                    file_path,
-                    extracted_text,
-                    json.dumps(ai_analysis),
-                    ai_analysis.get("client_name", "None"),
-                    ai_analysis.get("category", "Work"),
-                    ai_analysis.get("productivity_level", 5)
-                )
-            )
+            """, (
+                current_user.id,
+                application,
+                window_title,
+                file_path,
+                extracted_text,
+                json.dumps(ai_analysis),
+                ai_analysis.get("client_name", "None"),
+                ai_analysis.get("category", "Work"),
+                ai_analysis.get("productivity_level", 5)
+            ))
             activity_id = cur.fetchone()[0]
 
-        # 📸 Always save screenshot reference
+        # 📸 Always log screenshot
         cur.execute("""
             INSERT INTO screenshots (user_id, activity_id, path, taken_at)
             VALUES (%s, %s, %s, NOW())
@@ -903,11 +912,17 @@ async def upload_screenshot(
         cur.close()
         conn.close()
 
-        return {"status": "success", "path": file_path, "activity_id": activity_id, "ai_analysis": ai_analysis}
+        return {
+            "status": "success",
+            "path": file_path,
+            "activity_id": activity_id,
+            "ai_analysis": ai_analysis
+        }
 
     except Exception as e:
         print("❌ Upload error:", str(e))
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 
 
