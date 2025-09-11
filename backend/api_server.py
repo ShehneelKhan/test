@@ -808,6 +808,36 @@ def get_user_screenshots_by_date(user_id: int, date: str, current_user: UserOut 
     ]
 
 
+
+from fastapi import File, UploadFile, Form
+
+@app.post("/api/upload-screenshot")
+async def upload_screenshot(
+    screenshot: UploadFile = File(...),
+    application: str = Form(...),
+    window_title: str = Form(...),
+    timestamp: str = Form(...),
+    current_user: UserOut = Depends(get_current_user)
+):
+    os.makedirs("screenshots", exist_ok=True)
+    file_path = f"screenshots/{timestamp}_{screenshot.filename}"
+    
+    with open(file_path, "wb") as f:
+        f.write(await screenshot.read())
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO screenshots (user_id, path, taken_at, activity_id)
+        VALUES (%s, %s, NOW(), NULL)
+    """, (current_user.id, file_path))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {"status": "success", "path": file_path}
+
+
 from fastapi.staticfiles import StaticFiles
 
 if os.path.isdir("screenshots"):
