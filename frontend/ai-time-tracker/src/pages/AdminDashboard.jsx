@@ -226,7 +226,6 @@ export default function AdminDashboard() {
 
 
 
-console.log(`${BASE_URL}${s.path}`);
 
 return (
   <div className="flex h-screen">
@@ -481,7 +480,6 @@ return (
               </div>
 
               {/* Screenshots */}
-        
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">
                   Screenshots for {selectedDate}
@@ -505,6 +503,7 @@ return (
                         <p className="text-xs text-gray-500 p-2 text-center">
                           {new Date(s.taken_at).toLocaleString()}
                         </p>
+                        {console.log(`${BASE_URL}${s.path}`)}
                       </div>
                     ))}
                   </div>
