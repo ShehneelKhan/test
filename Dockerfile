@@ -6,14 +6,17 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Install system dependencies (Xvfb for virtual display, plus required libs for screenshots & tesseract if needed later)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     xvfb \
+    xauth \
     libx11-6 \
     libxtst6 \
     libxrender1 \
     libxi6 \
     tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Set work directory
 WORKDIR /app
