@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 import psutil
 import sys
-
+import mss
 if sys.platform == "win32":
     import win32gui
     import win32process
@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 import os
 from dotenv import load_dotenv
+import platform
+import mss
 
 
 load_dotenv()
@@ -133,23 +135,40 @@ class AITimeTracker:
         else:
             return {"application": "N/A", "window_title": "N/A"}
 
+
     def capture_screenshot(self, user_id: int, activity_id: int = None) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         os.makedirs("screenshots", exist_ok=True)
         path = f"screenshots/screenshot_{timestamp}.png"
-        ImageGrab.grab().save(path)
 
-        conn = self.db()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO screenshots (user_id, activity_id, path, taken_at)
-            VALUES (%s, %s, %s, NOW())
-        """, (user_id, activity_id, path))
-        conn.commit()
-        cur.close()
-        conn.close()
+        try:
+            if platform.system() == "Windows":
+                # ✅ Windows → use ImageGrab
+                ImageGrab.grab().save(path)
+            else:
+                # ✅ Linux/Mac → use MSS
+                with mss.mss() as sct:
+                    sct.shot(output=path)
+
+            # Save screenshot record in DB
+            conn = self.db()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO screenshots (user_id, activity_id, path, taken_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (user_id, activity_id, path))
+            conn.commit()
+            cur.close()
+            conn.close()
+
+        except Exception as e:
+            print(f"⚠️ Screenshot capture failed: {e}")
+            # fallback blank image
+            img = Image.new("RGB", (800, 600), color=(73, 109, 137))
+            img.save(path)
 
         return path
+
 
     def extract_text_from_screen(self, screenshot_path: str) -> str:
         try:
