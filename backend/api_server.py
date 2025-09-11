@@ -823,7 +823,7 @@ async def upload_screenshot(
         os.makedirs("screenshots", exist_ok=True)
         file_path = f"screenshots/{timestamp}_{screenshot.filename}"
 
-        # Save file
+        # Save screenshot
         with open(file_path, "wb") as f:
             f.write(await screenshot.read())
 
@@ -834,28 +834,79 @@ async def upload_screenshot(
             extracted_text
         )
 
-        # Create activity session
-        session = ActivitySession(
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow(),
-            application=application,
-            window_title=window_title,
-            screenshot_path=file_path,
-            extracted_text=extracted_text,
-            ai_analysis=ai_analysis,
-            client_identified=ai_analysis.get("client_name", "None"),
-            category=ai_analysis.get("category", "Work"),
-            productivity_score=ai_analysis.get("productivity_level", 5),
-            user_id=current_user.id
-        )
+        conn = db()
+        cur = conn.cursor()
 
-        tracker.save_session(session)
+        # 🔍 Check if an activity for this user + window is still open
+        cur.execute("""
+            SELECT id, start_time FROM activities
+            WHERE user_id = %s AND application = %s AND window_title = %s
+            ORDER BY start_time DESC
+            LIMIT 1
+        """, (current_user.id, application, window_title))
+        row = cur.fetchone()
 
-        return {"status": "success", "path": file_path, "ai_analysis": ai_analysis}
+        if row:
+            # ✅ Update existing activity's end_time + duration
+            activity_id = row[0]
+            cur.execute("""
+                UPDATE activities
+                SET end_time = NOW(),
+                    duration_minutes = ROUND(EXTRACT(EPOCH FROM (NOW() - start_time)) / 60.0, 2),
+                    screenshot_path = %s,
+                    ai_analysis = %s,
+                    client_identified = %s,
+                    category = %s,
+                    productivity_score = %s
+                WHERE id = %s
+            """, (
+                file_path,
+                json.dumps(ai_analysis),
+                ai_analysis.get("client_name", "None"),
+                ai_analysis.get("category", "Work"),
+                ai_analysis.get("productivity_level", 5),
+                activity_id
+            ))
+        else:
+            # 🆕 Create a new activity
+            cur.execute("""
+                INSERT INTO activities (
+                    user_id, start_time, application, window_title,
+                    screenshot_path, extracted_text, ai_analysis,
+                    client_identified, category, productivity_score,
+                    entry_type
+                )
+                VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Agent Upload')
+                RETURNING id
+            """, (
+                current_user.id,
+                application,
+                window_title,
+                file_path,
+                extracted_text,
+                json.dumps(ai_analysis),
+                ai_analysis.get("client_name", "None"),
+                ai_analysis.get("category", "Work"),
+                ai_analysis.get("productivity_level", 5)
+            ))
+            activity_id = cur.fetchone()[0]
+
+        # 📸 Always save screenshot reference
+        cur.execute("""
+            INSERT INTO screenshots (user_id, activity_id, path, taken_at)
+            VALUES (%s, %s, %s, NOW())
+        """, (current_user.id, activity_id, file_path))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return {"status": "success", "path": file_path, "activity_id": activity_id, "ai_analysis": ai_analysis}
 
     except Exception as e:
         print("❌ Upload error:", str(e))
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 
 
