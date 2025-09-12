@@ -136,6 +136,8 @@ const fetchTrackingStatus = async () => {
   };
 
   const getStatusColor = (status) => {
+    console.log("STATUS")
+    console.log(status)
     switch ((status || "").toLowerCase()) {
       case "completed":
         return "bg-green-100 text-green-800 border-green-300";
@@ -340,7 +342,7 @@ const fetchTrackingStatus = async () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="font-semibold text-gray-900">
-                              {activity.application}
+                              Activity: {activity.window_title}
                             </h3>
                             <span
                               className={`px-2 py-1 text-xs border rounded-full ${getProductivityColor(
@@ -358,7 +360,7 @@ const fetchTrackingStatus = async () => {
                                 {activity.entry_type}
                               </span>
                             )}
-                            {activity.entry_type !== "Automated Entry" &&
+                            {
                               activity.status && (
                                 <span
                                   className={`px-2 py-1 text-xs border rounded-full ${getStatusColor(
@@ -395,7 +397,7 @@ const fetchTrackingStatus = async () => {
                             ? new Date(
                                 activity.end_time
                               ).toLocaleTimeString()
-                            : "Ongoing"}
+                            : "Interrupted"}
                         </p>
                         <p className="font-medium text-gray-900">
                           {formatDuration(activity.duration_minutes || 0)}

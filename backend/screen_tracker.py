@@ -135,7 +135,7 @@ class AITimeTracker:
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
                 process = psutil.Process(pid)
                 return {
-                    "application": process.name(),
+                    "application": process.name().replace(".exe", ""),
                     "window_title": window_title
                 }
             except Exception:

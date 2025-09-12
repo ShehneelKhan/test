@@ -406,7 +406,7 @@ return (
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
                                   <h3 className="font-semibold text-gray-900">
-                                    {activity.application}
+                                    Activity: {activity.window_title}
                                   </h3>
                                   <span
                                     className={`px-2 py-1 text-xs border rounded-full ${getProductivityColor(
@@ -463,7 +463,7 @@ return (
                                   ? new Date(
                                       activity.end_time
                                     ).toLocaleTimeString()
-                                  : "Ongoing"}
+                                  : "Interrupted"}
                               </p>
                               <p className="font-medium text-gray-900">
                                 {formatDuration(

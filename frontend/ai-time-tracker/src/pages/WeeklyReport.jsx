@@ -11,6 +11,7 @@ import {
   BarChart,
   Bar,
   LineChart,
+  Legend,
   Line,
   XAxis,
   YAxis,
@@ -50,8 +51,14 @@ export default function WeeklyReport() {
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!report) return <p className="p-6">No data available</p>;
 
-  const { week_start, week_end, summary, category_breakdown, daily_breakdown, screenshots = [] } =
+  const { week_start, week_end, summary, category_breakdown, daily_breakdown, client_duration = {}, screenshots = [] } =
     report;
+
+  const allClientData = Object.entries(client_duration).map(([client, minutes]) => ({
+    client,
+    hours: minutes / 60,
+    }));
+
 
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#A569BD", "#5DADE2"];
 
@@ -68,7 +75,7 @@ export default function WeeklyReport() {
 
   const clientData = (summary?.top_clients || []).map(([client, count]) => ({
     client,
-    sessions: count,
+    activities: count,
   }));
 
   // Fake productivity trend using daily avg (backend can be extended to provide actual trend)
@@ -80,7 +87,10 @@ export default function WeeklyReport() {
   return (
     <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">
-        Weekly Report for <span className="text-blue-600">{report.username}</span> <br />
+        Weekly Report for: <span className="text-blue-600">
+          {/* {report.username.toUpperCase()} */}
+          {report.username.charAt(0).toUpperCase() + report.username.slice(1)}
+          </span> <br />
         <span className="text-gray-600 text-lg">
             ({week_start} → {week_end})
         </span>
@@ -136,13 +146,13 @@ export default function WeeklyReport() {
                 dataKey="value"
                 nameKey="name"
                 outerRadius={120}
-                label={({ name, value }) => `${name}: ${(value / 60).toFixed(1)}h`}
               >
                 {categoryData.map((_, i) => (
                   <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip formatter={(val, name) => [`${(val / 60).toFixed(1)} hours`, name]} />
+              <Legend />
             </PieChart>
           </ResponsiveContainer>
         )}
@@ -186,7 +196,7 @@ export default function WeeklyReport() {
 
       {/* Clients Bar */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Top Clients (Sessions)</h2>
+        <h2 className="text-lg font-semibold mb-4">Top Clients (Activities)</h2>
         {clientData.length === 0 ? (
           <p className="text-gray-500">No client data</p>
         ) : (
@@ -195,12 +205,32 @@ export default function WeeklyReport() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="client" />
               <YAxis />
-              <Tooltip formatter={(val) => `${val} sessions`} />
-              <Bar dataKey="sessions" fill="#8b5cf6" />
+              <Tooltip formatter={(val) => `${val} activities`} />
+              <Bar dataKey="activities" fill="#8b5cf6" />
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
+
+
+      {/* Clients Duration Bar */}  
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">All Clients (Weekly Hours)</h2>
+        {allClientData.length === 0 ? (
+          <p className="text-gray-500">No client duration data</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={allClientData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="client" />
+              <YAxis />
+              <Tooltip formatter={(val) => `${val.toFixed(1)}h`} />
+              <Bar dataKey="hours" fill="#f59e0b" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
 
     </div>
   );

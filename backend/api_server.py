@@ -261,6 +261,79 @@ def tracking_status(current_user: UserOut = Depends(get_current_user)):
 
 
 # ====== Data endpoints ======
+# @app.get("/api/activities")
+# def get_activities(
+#     date: str = Query(..., description="YYYY-MM-DD"),
+#     user_id: Optional[int] = Query(None, description="Admin only: view someone else"),
+#     current_user: UserOut = Depends(get_current_user)
+# ):
+#     print("Started get_activities...")
+#     target_user_id = current_user.id
+#     print("Filtering for User ID = {}, Date = {}".format(target_user_id, date))
+
+#     if user_id is not None:
+#         if current_user.role != "admin":
+#             raise HTTPException(status_code=403, detail="Admin access required to view other users")
+#         target_user_id = user_id
+
+#     conn = db()
+#     cur = conn.cursor()
+#     cur.execute("""
+#         SELECT id, user_id, start_time, end_time, application, window_title,
+#                screenshot_path, ai_analysis, client_identified,
+#                category, productivity_score,
+#                ROUND(EXTRACT(EPOCH FROM (COALESCE(end_time, NOW()) - start_time)) / 60.0, 2) AS duration_minutes,
+#                status, entry_type
+#         FROM activities
+#         WHERE user_id = %s AND DATE(start_time) = %s
+#         ORDER BY start_time
+#     """, (target_user_id, date))
+
+#     rows = cur.fetchall()
+#     cur.close()
+#     conn.close()
+
+#     columns = [
+#         'id','user_id','start_time','end_time','application','window_title',
+#         'screenshot_path','ai_analysis','client_identified',
+#         'category','productivity_score','duration_minutes','status', 'entry_type'
+#     ]
+
+#     results = []
+#     for r in rows:
+#         rec = dict(zip(columns, r))
+
+#         # Ensure ai_analysis is always a JSON object
+#         if rec["ai_analysis"] is None:
+#             rec["ai_analysis"] = {}
+#         elif isinstance(rec["ai_analysis"], str):
+#             try:
+#                 rec["ai_analysis"] = json.loads(rec["ai_analysis"])
+#             except:
+#                 rec["ai_analysis"] = {}
+
+#         # Normalize client_identified
+#         if isinstance(rec["client_identified"], dict):
+#             rec["client_identified"] = rec["client_identified"].get("client_name", "None")
+
+#         # Fix productivity_score
+#         try:
+#             rec["productivity_score"] = int(rec["productivity_score"])
+#         except:
+#             rec["productivity_score"] = 5
+
+#         # Round duration safely (if SQL didn’t handle it for some reason)
+#         if rec["duration_minutes"] is not None:
+#             rec["duration_minutes"] = round(float(rec["duration_minutes"]), 2)
+#         else:
+#             rec["duration_minutes"] = 0.0
+
+#         results.append(rec)
+
+#     print(results)
+#     print("Ended get_activities")
+#     return results
+
 @app.get("/api/activities")
 def get_activities(
     date: str = Query(..., description="YYYY-MM-DD"),
@@ -282,7 +355,7 @@ def get_activities(
         SELECT id, user_id, start_time, end_time, application, window_title,
                screenshot_path, ai_analysis, client_identified,
                category, productivity_score,
-               ROUND(EXTRACT(EPOCH FROM (COALESCE(end_time, NOW()) - start_time)) / 60.0, 2) AS duration_minutes,
+               EXTRACT(EPOCH FROM (COALESCE(end_time, NOW()) - start_time)) / 60.0 AS duration_minutes,
                status, entry_type
         FROM activities
         WHERE user_id = %s AND DATE(start_time) = %s
@@ -322,17 +395,19 @@ def get_activities(
         except:
             rec["productivity_score"] = 5
 
-        # Round duration safely (if SQL didn’t handle it for some reason)
-        if rec["duration_minutes"] is not None:
+        # Handle duration_minutes calculation and end_time
+        if rec["end_time"] is not None:
+            # If end_time exists, calculate the duration
             rec["duration_minutes"] = round(float(rec["duration_minutes"]), 2)
         else:
-            rec["duration_minutes"] = 0.0
+            # If end_time is None, set duration_minutes to None
+            rec["duration_minutes"] = None
 
         results.append(rec)
 
+    print(results)
     print("Ended get_activities")
     return results
-
 
 
 #### ADD CLIENTS #####
@@ -458,7 +533,7 @@ def manual_entry(payload: dict = Body(...), current_user: UserOut = Depends(get_
 
     end_time = start_time + timedelta(minutes=duration_minutes)
 
-    status = payload.get("status", "In Progress")
+    status = payload.get("status", "Completed")
 
     # 🔥 Step 0: Check for duplicate entry at same time for same user
     cur.execute("""
@@ -736,14 +811,16 @@ def get_weekly_report(user_id: int, current_user: UserOut = Depends(require_admi
     # Fetch activities
     cur.execute("""
         SELECT start_time, end_time, client_identified, ai_analysis, category,
-               productivity_score,
-               ROUND(EXTRACT(EPOCH FROM (COALESCE(end_time, NOW()) - start_time)) / 60.0, 2) AS duration_minutes
+            productivity_score,
+            ROUND(EXTRACT(EPOCH FROM (end_time - start_time)) / 60.0, 2) AS duration_minutes
         FROM activities
-        WHERE user_id = %s AND DATE(start_time) BETWEEN %s AND %s
+        WHERE user_id = %s 
+        AND DATE(start_time) BETWEEN %s AND %s
+        AND end_time IS NOT NULL
         ORDER BY start_time
     """, (user_id, week_start, week_end))
-    rows = cur.fetchall()
 
+    rows = cur.fetchall()
     cur.close()
     conn.close()
 
@@ -753,6 +830,7 @@ def get_weekly_report(user_id: int, current_user: UserOut = Depends(require_admi
     client_count = {}
     category_time = {}
     daily_time = {d.strftime("%a"): 0 for d in [week_start + timedelta(days=i) for i in range(7)]}
+    client_duration = {}
 
     for r in rows:
         start_time, end_time, client_identified, raw_ai, category, prod_score, duration = r
@@ -766,6 +844,7 @@ def get_weekly_report(user_id: int, current_user: UserOut = Depends(require_admi
         # Client frequency
         if client_identified and client_identified != "None":
             client_count[client_identified] = client_count.get(client_identified, 0) + 1
+            client_duration[client_identified] = client_duration.get(client_identified, 0) + duration
 
         # Category breakdown
         if category:
@@ -789,8 +868,10 @@ def get_weekly_report(user_id: int, current_user: UserOut = Depends(require_admi
         },
         "category_breakdown": category_time,
         "daily_breakdown": daily_time,
+        "client_duration": client_duration,
         "username": username,
     }
+
 
 
 @app.get("/api/admin/users/{user_id}/screenshots-by-date")
@@ -913,7 +994,7 @@ async def upload_screenshot(
                     client_identified, category, productivity_score,
                     entry_type
                 )
-                VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Agent Upload')
+                VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'Automated Entry')
                 RETURNING id
             """, (
                 current_user.id,
