@@ -6,19 +6,19 @@ from PIL import ImageGrab
 import psutil
 import win32gui, win32process  # only works on Windows
 
-# API_BASE = "https://test-8d3m.onrender.com"
-API_BASE = "http://127.0.0.1:8000"
-EMAIL = "shehneel.khan@datapillar.co.uk"
-PASSWORD = "abcd1234"
+API_BASE = "https://test-8d3m.onrender.com"
+# API_BASE = "http://127.0.0.1:8000"
+# EMAIL = "shehneel.khan@datapillar.co.uk"
+# PASSWORD = "abcd1234"
 
 class DesktopAgent:
     def __init__(self):
         self.token = None
 
-    def login(self):
+    def login(self, email, password):
         resp = requests.post(f"{API_BASE}/api/login", json={
-            "username": EMAIL,
-            "password": PASSWORD
+            "username": email,
+            "password": password
         })
         if resp.status_code == 200:
             self.token = resp.json()["access_token"]
@@ -62,11 +62,11 @@ class DesktopAgent:
         os.remove(filename)
 
 
-    def run(self):
-        self.login()
-        while True:
-            self.capture_and_send()
-            time.sleep(5)  # every 60s
+    # def run(self):
+    #     self.login()
+    #     while True:
+    #         self.capture_and_send()
+            # time.sleep(5)  # every 60s
 
-if __name__ == "__main__":
-    DesktopAgent().run()
+# if __name__ == "__main__":
+#     DesktopAgent().run()
